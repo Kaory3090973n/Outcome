@@ -451,18 +451,18 @@ function resize() {
   const s = document.createElement('canvas'); s.width = 4; s.height = 4;
   const g = s.getContext('2d'); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, 0, 4, 1);
   scan = ctx.createPattern(s, 'repeat');
-  ZOOM = TOUCH ? clamp(innerHeight / 380, 1, 1.6) : clamp(Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H), .6, 3);   // PC: mesma área visível em telas pequenas e grandes
+  ZOOM = TOUCH ? clamp(innerHeight / 380, 1, 1.6) : clamp(Math.max(innerWidth / VIEW_W, innerHeight / VIEW_H), .3, 5);   // PC: mesma área visível em telas pequenas e grandes
   const fogIn = TOUCH ? Math.min(innerWidth, innerHeight) * .28 : VIEW_H * ZOOM * .28, fogOut = TOUCH ? Math.max(innerWidth, innerHeight) * .55 : VIEW_W * ZOOM * .55;   // o campo de visão também acompanha a área fixa
   fog = ctx.createRadialGradient(0, 0, fogIn, 0, 0, fogOut);   // campo de visão limitado ao redor do personagem
   fog.addColorStop(0, 'rgba(4,4,8,0)'); fog.addColorStop(1, 'rgba(4,4,8,.88)');
-  VW = innerWidth / ZOOM; VH = innerHeight / ZOOM; WW = VW * MAPK; WH = VH * MAPK; if (NET.world) { WW = NET.world.w; WH = NET.world.h; }
+  VW = innerWidth / ZOOM; VH = innerHeight / ZOOM; WW = TOUCH ? VW * MAPK : VIEW_W * MAPK; WH = TOUCH ? VH * MAPK : VIEW_H * MAPK; if (NET.world) { WW = NET.world.w; WH = NET.world.h; }
   buildCrates();
 }
 let curMap = null;   // mapa da partida em andamento (null = layout original do treinamento)
 function buildCrates() {
   const W = WW, H = WH;
   if (!curMap) {   // layout original: [x%, y%, w, h] com w/h relativos à menor dimensão
-    const m = Math.min(VW, VH);
+    const m = TOUCH ? Math.min(VW, VH) : VIEW_H;
     crates = [[.2,.24,.14,.09],[.68,.2,.2,.08],[.46,.48,.1,.1],[.14,.68,.2,.08],[.74,.64,.08,.2],[.4,.8,.12,.07],[.1,.08,.1,.07],[.3,.46,.07,.12],[.56,.1,.12,.06],[.86,.42,.07,.14],[.9,.84,.08,.1],[.28,.9,.14,.06],[.62,.74,.1,.08],[.08,.46,.08,.1],[.52,.3,.08,.08],[.8,.1,.06,.12]]
       .map(([a, b, c, d]) => ({ x: a * W, y: b * H, w: c * m, h: d * m, k: 'box', v: 0, seed: 0 }));
     return;
@@ -2188,6 +2188,12 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 38, v: '0.25.1', title: 'Visão e mapa iguais em todas as telas',
+    modificado: [
+      'Zoom do PC (função resize): agora usa o MAIOR entre largura/1200 e altura/675, em vez do menor. Assim nenhuma tela enxerga mais que 1200 x 675 do mapa, e telas menores ou de outro formato não enxergam menos que as grandes na mesma proporção.',
+      'Tamanho do mundo no PC (função resize): passou a ser fixo (1200 x 675 vezes 2,2), igual para todo mundo. Antes ele mudava conforme o tamanho da janela, então o mapa ficava com outro tamanho e algumas partes bugavam em telas diferentes.',
+      'Os caixotes do mapa original (treinamento) usam uma unidade fixa em vez da tela.',
+    ] },
   { n: 37, v: '0.25.0', title: 'Visão justa, FPS e MS',
     criado: [
       'Contador de FPS e de MS (tempo de cada quadro) no painel do canto superior direito, durante a partida e também no SOLITÁRIO.',
