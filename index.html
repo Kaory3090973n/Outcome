@@ -113,7 +113,7 @@ const MODES = ['CLÁSSICO', 'INFINITO'], PTS = [3, 5, 7, 10, 15], TIMES = [30, 6
 const LOOTS = [{ name: 'POUCA', init: 3, cap: 4, every: 14 }, { name: 'MÉDIA', init: 5, cap: 7, every: 9 }, { name: 'ALTA', init: 9, cap: 12, every: 5 }];   // loot: armas iniciais, máximo no mapa e intervalo de novas armas (s)
 let state = 'intro', cfg = { bots: 4, diff: 1, char: 0, mode: 0, pts: 1, time: 2, loot: 1, musicVol: 7, sfxVol: 8, music: 0 }, training = false, chIdx = 0, trainT = 0;
 let M = null, introT = 0;
-const NET = { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', err: '', busy: false, snap: null, others: null, cap: 8, copied: false }; let JOIN = '';   // estado do modo online
+const NET = { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', err: '', busy: false, snap: null, others: null, cap: 8, copied: false }; let JOIN = '', NETBID = 0;   // estado do modo online
 /* Teclas personalizáveis (tela OPÇÕES). As setas continuam movendo o personagem como alternativa. */
 const KEYDEFS = [['up', 'MOVER PARA CIMA', 'KeyW'], ['down', 'MOVER PARA BAIXO', 'KeyS'], ['left', 'MOVER PARA ESQUERDA', 'KeyA'], ['right', 'MOVER PARA DIREITA', 'KeyD'],
   ['interact', 'PEGAR ARMA', 'KeyE'], ['reload', 'RECARREGAR', 'KeyR'], ['cover', 'COBERTURA', 'KeyQ'], ['throw', 'ARREMESSAR ARMA', 'KeyG'], ['hit', 'MOSTRAR HITBOX', 'KeyH']];
@@ -277,7 +277,7 @@ cfg.bots = clamp(+cfg.bots || 4, 1, 8); cfg.diff = clamp(+cfg.diff || 0, 0, 2); 
 cfg.pts = clamp(+cfg.pts || 0, 0, PTS.length - 1); cfg.time = clamp(+cfg.time || 0, 0, TIMES.length - 1); cfg.loot = clamp(+cfg.loot || 0, 0, LOOTS.length - 1);
 cfg.musicVol = clamp(isFinite(cfg.musicVol) ? Math.round(cfg.musicVol) : 7, 0, 10); cfg.sfxVol = clamp(isFinite(cfg.sfxVol) ? Math.round(cfg.sfxVol) : 8, 0, 10); cfg.music = clamp(isFinite(cfg.music) ? Math.round(cfg.music) : 0, 0, 5); cfg.char = clamp(cfg.char, 0, 7); cfg.map = clamp(isFinite(cfg.map) ? Math.round(cfg.map) : 3, 0, 3);   // map: 0-2 = mapa fixo, 3 = aleatório
 cfg.team = clamp(+cfg.team || 0, 0, 4);   // 0 = sala personalizada (todos contra todos); 1..4 = 1v1..4v4 (times)
-const nBots = () => cfg.team > 0 ? cfg.team * 2 - 1 : cfg.bots;   // 1v1: 1 bot | 2v2: 3 bots | 3v3: 5 | 4v4: 7
+const nBots = () => cfg.team > 0 ? cfg.team * 2 - 1 : cfg.bots + (NET.online ? NET.guests.length : 0);   // 1v1: 1 bot | 2v2: 3 bots | 3v3: 5 | 4v4: 7
 let soloSetup = false;   // true = a tela de configuração é a do SOLITÁRIO (só mapa e armas)
 const saveCfg = () => { try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {} };
 let ZOOM = 1.4;              // zoom do mapa/personagens (no celular se adapta à altura da tela)
@@ -453,7 +453,7 @@ function resize() {
   fog = ctx.createRadialGradient(0, 0, Math.min(innerWidth, innerHeight) * .28, 0, 0, Math.max(innerWidth, innerHeight) * .55);   // campo de visão limitado ao redor do personagem
   fog.addColorStop(0, 'rgba(4,4,8,0)'); fog.addColorStop(1, 'rgba(4,4,8,.88)');
   ZOOM = TOUCH ? clamp(innerHeight / 380, 1, 1.6) : 1.6;
-  VW = innerWidth / ZOOM; VH = innerHeight / ZOOM; WW = VW * MAPK; WH = VH * MAPK;
+  VW = innerWidth / ZOOM; VH = innerHeight / ZOOM; WW = VW * MAPK; WH = VH * MAPK; if (NET.world) { WW = NET.world.w; WH = NET.world.h; }
   buildCrates();
 }
 let curMap = null;   // mapa da partida em andamento (null = layout original do treinamento)
@@ -532,11 +532,11 @@ function startGame(tr, keepKills) {
     for (let i = 0; i < L.init; i++) { const k = ks[i % ks.length], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); }
     pickupTimer = L.every;
   }
-  touch.ang = 0; updateCam(); setState('play');
+  assignRemotes(); touch.ang = 0; updateCam(); setState('play');
 }
 /* ------------------------------ PARTIDA ------------------------------- */
 function startMatch() {
-  soloSetup = false;
+  soloSetup = false; if (NET.online) NET.mid++;
   try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {}
   const mi = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map; curMap = MAPS[mi]; buildCrates();   // ALEATÓRIO sorteia a cada partida
   const pre = cfg.team > 0;   // predefinido (1v1..4v4): clássico, 3 minutos, times
@@ -589,7 +589,7 @@ function setState(s) { state = s; if (s === 'menu') netReset(); if (s === 'room'
 /* ------------------------------ COMBATE ------------------------------- */
 function tryPunch(f) {
   if (f.cooldown > 0) return;
-  if (f.isPlayer) input.buffer = 0;   // soco exige um clique novo
+  if (f.isPlayer) input.buffer = 0; else if (f.remote) f.rbuf = 0;   // soco exige um clique novo
   const hand = f.nextHand, p = f.punch[hand];
   f.combo = f.comboTimer > 0 ? f.combo + 1 : 1; f.comboTimer = C.comboWindow;
   p.t = 0; p.heavy = f.combo % 3 === 0; p.fx = false; p.landed = false;
@@ -642,15 +642,16 @@ function kill(f, src) {
 function shoot(f, w) {
   f.fireCd = w.rate; f.mag--; f.kick = w.kick; f.flash = .06;
   sfxGun(f.weapon, f.isPlayer || !player ? 1 : clamp(1 - Math.hypot(f.x - player.x, f.y - player.y) / 900, .15, 1));   // som próprio de cada arma (mais baixo se o atirador está longe)
+  if (NET.online && NET.host) NET.ev.push(['s', f.weapon, Math.round(f.x), Math.round(f.y)]);
   const m = toWorld(f, holdX(w) + w.muzzle, 0); m.x += f.coverOff.x; m.y += f.coverOff.y;
   for (let i = 0; i < w.pellets; i++) {
     const sp = f.cover ? (f.peekK > .5 ? 0 : w.spread + .1) : w.spread, a = f.angle + rnd(-sp, sp);   // espiando: 100% de precisão | tiro cego: dispersão extra
-    if (!sweepShot(f, a, m, w)) { const tr = { pts: [{ x: m.x, y: m.y, t: btClock }] }; btrails.push(tr); bullets.push({ x: m.x, y: m.y, vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed, dmg: w.dmg, owner: f, life: w.life, tr }); }
+    if (!sweepShot(f, a, m, w)) { const tr = { pts: [{ x: m.x, y: m.y, t: btClock }] }; btrails.push(tr); bullets.push({ id: ++NETBID, x: m.x, y: m.y, vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed, dmg: w.dmg, owner: f, life: w.life, tr }); }
   }
   const e = toWorld(f, holdX(w) + 8, 5);
   casings.push({ x: e.x, y: e.y, vx: Math.cos(f.angle + 1.5) * rnd(60, 130), vy: Math.sin(f.angle + 1.5) * rnd(60, 130), rot: rnd(0, TAU), vr: rnd(-15, 15), life: .9, big: w.pellets > 1 });
   f.vx -= Math.cos(f.angle) * w.kick * 6; f.vy -= Math.sin(f.angle) * w.kick * 6;
-  if (f.isPlayer) { shake = Math.max(shake, w.kick * .7); input.buffer = 0; }
+  if (f.isPlayer) { shake = Math.max(shake, w.kick * .7); input.buffer = 0; } else if (f.remote) f.rbuf = 0;
   if (f.mag === 0 && f.reserve > 0) { f.reloadT = f.reloadMax = w.reload; }
 }
 
@@ -660,7 +661,7 @@ function sweepShot(f, a, m, w) {
   for (let i = 1; i <= n; i++) {
     const x = sx + (m.x - sx) * i / n, y = sy + (m.y - sy) * i / n;
     if (inCrate(x, y)) return true;
-    for (const e of enemiesOf(f)) if (Math.hypot(e.x - x, e.y - y) < hitR(e)) { damage(e, w.dmg * (f.isPlayer ? 1 : DIFFS[cfg.diff].dmg), a, f); return true; }
+    for (const e of enemiesOf(f)) if (Math.hypot(e.x - x, e.y - y) < hitR(e)) { damage(e, w.dmg * (f.isPlayer || f.remote ? 1 : DIFFS[cfg.diff].dmg), a, f); return true; }
   }
   return false;
 }
@@ -759,7 +760,7 @@ function updateFighter(f, dt, it) {
       if (f.reloadT > 0) { f.reloadT -= dt; if (f.reloadT <= 0) { const n = Math.min(w.mag - f.mag, f.reserve); f.mag += n; f.reserve -= n; } }
       else if (it.reload && f.mag < w.mag && f.reserve > 0) f.reloadT = f.reloadMax = w.reload;
       else if (it.fire && f.fireCd <= 0) { if (f.mag > 0) shoot(f, w); else if (f.reserve > 0) f.reloadT = f.reloadMax = w.reload; }
-      if (!f.isPlayer && !f.mag && !f.reserve && f.reloadT <= 0) { f.emptyT += dt; if (f.emptyT > .7) f.weapon = null; } else f.emptyT = 0;
+      if (!f.isPlayer && !f.remote && !f.mag && !f.reserve && f.reloadT <= 0) { f.emptyT += dt; if (f.emptyT > .7) f.weapon = null; } else f.emptyT = 0;
     }
   } else if (it.punch) tryPunch(f);
 
@@ -809,6 +810,7 @@ function collide(f) {
 
 /* ------------------------------ INTENÇÕES ----------------------------- */
 function playerIntent(dt) {
+  if (state === 'pause') return { mx: 0, my: 0, aim: player.angle, fire: false, punch: false, reload: false, throw: false };   // menu aberto: personagem parado
   const k = input.keys;
   let mx = (k[KEYS.right] || k.ArrowRight ? 1 : 0) - (k[KEYS.left] || k.ArrowLeft ? 1 : 0);
   let my = (k[KEYS.down] || k.ArrowDown ? 1 : 0) - (k[KEYS.up] || k.ArrowUp ? 1 : 0);
@@ -879,7 +881,7 @@ function updateBullets(dt) {
       }
       for (const f of [player, ...bots])
         if (!f.dead && f !== b.owner && f.team !== b.owner.team && Math.hypot(f.x - b.x, f.y - b.y) < hitR(f) && !(f.cover && f.peekK < .5 && b.vx * f.cover.nx + b.vy * f.cover.ny > 0)) {   // protegido de tiros vindos do outro lado da parede
-          damage(f, b.dmg * (b.owner.isPlayer ? 1 : DIFFS[cfg.diff].dmg), Math.atan2(b.vy, b.vx), b.owner);
+          damage(f, b.dmg * (b.owner.isPlayer || b.owner.remote ? 1 : DIFFS[cfg.diff].dmg), Math.atan2(b.vy, b.vx), b.owner);
           b.life = 0; break;
         }
     }
@@ -916,13 +918,13 @@ function coverOrigin(f, w, aim, reach) {
 function updateCover(f, it, dt) {
   f.coverBlock = false;
   if (f.stun > 0 || f.dead) f.cover = null;
-  else if (input.coverReq) { const w = f.cover ? null : nearestWall(f, 12); if (w) { f.x -= w.nx * w.gap; f.y -= w.ny * w.gap; } f.cover = w; }   // gruda na parede
+  else if (f.remote ? f.coverReq : input.coverReq) { const w = f.cover ? null : nearestWall(f, 12); if (w) { f.x -= w.nx * w.gap; f.y -= w.ny * w.gap; } f.cover = w; }   // gruda na parede
   f.isCovered = !!f.cover;
   if (!f.cover) { f.peekK = approach(f.peekK, 0, dt * 8); f.coverOff = { x: 0, y: 0 }; return; }
   const w = nearestWall(f, 16);
   if (!w || it.mx * w.nx + it.my * w.ny > .6) { f.cover = null; f.isCovered = false; f.coverOff = { x: 0, y: 0 }; return; }   // parede acabou ou se afastou
   f.cover = w;
-  const tx = -w.ny, ty = w.nx, m = it.mx * tx + it.my * ty, exposed = input.peek || Object.values(touch.btn).includes('M');
+  const tx = -w.ny, ty = w.nx, m = it.mx * tx + it.my * ty, exposed = f.remote ? f.rin.pk : (input.peek || Object.values(touch.btn).includes('M'));
   it.mx = tx * m * .75 - w.nx * .2; it.my = ty * m * .75 - w.ny * .2;   // só anda ao longo da parede
   f.peekK = approach(f.peekK, exposed ? 1 : 0, dt * 8); f.leanS = Math.cos(it.aim) * tx + Math.sin(it.aim) * ty >= 0 ? 1 : -1;
   const org = coverOrigin(f, w, it.aim, exposed ? 70 : 44);   // tiro cego: só a arma sai pela quina | espiar: sai mais
@@ -946,6 +948,7 @@ function updatePlay(dt) {
   input.interact = input.throwReq = input.reloadReq = input.coverReq = false;
   for (const b of bots) {
     if (b.dead) continue;   // ninguém renasce: quem cai só volta na próxima rodada
+    if (b.remote) { remoteStep(b, dt); continue; }
     updateFighter(b, dt, b.stun > 0 ? {} : botIntent(b, dt));
   }
   updateBullets(dt); updateThrown(dt);
@@ -1752,9 +1755,9 @@ function drawMatchEnd() {
   let y = y0 + 104;
   order.forEach((f, i) => { txt(`${i + 1}. ${f[0]}`, cx - 130, y, 14, f[2] ? INK : MUTE, 'left'); txt(String(f[1]), cx + 130, y, 14, f[2] ? INK : MUTE, 'right'); y += 24; });
   y += 14;
-  button('JOGAR DE NOVO', cx - 130, y, 260, 52, startMatch, 'primary');
-  button('CONFIGURAR', cx - 130, y + 62, 260, 44, () => setState('setup'));
-  button('MENU', cx - 130, y + 114, 260, 44, () => setState('menu'));
+  if (NET.cl) txt('AGUARDANDO O ANFITRIÃO...', cx, y + 26, 14, MUTE, 'center'); else button('JOGAR DE NOVO', cx - 130, y, 260, 52, startMatch, 'primary');
+  if (!NET.online) button('CONFIGURAR', cx - 130, y + 62, 260, 44, () => setState('setup'));
+  button('MENU', cx - 130, y + (NET.online ? 62 : 114), 260, 44, () => setState('menu'));
   ctx.restore();
 }
 
@@ -2516,7 +2519,11 @@ function drawDead() {
 /* ------------------------------ ONLINE (WebRTC via PeerJS) ------------------ */
 /* Sala de 4 dígitos: o anfitrião registra o ID "outcome-game-XXXX" e os outros se conectam a ele. Funciona no GitHub Pages (sem servidor próprio). */
 const PFX = 'outcome-game-';
-function netReset() { try { if (NET.peer) NET.peer.destroy(); } catch (e) {} Object.assign(NET, { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', busy: false, snap: null, others: null, copied: false }); }
+function netReset() { try { if (NET.peer) NET.peer.destroy(); } catch (e) {} const hadW = !!NET.world;
+  Object.assign(NET, { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', busy: false, snap: null, others: null, copied: false,
+    online: false, cl: false, ci: 0, all: [], guests: [], rin: {}, ev: [], mid: 0, acc: 0, ia: 0, rd: -1, lb: 0, aim: 0, myTeam: 0, world: null, cnt: { clk: 0, it: 0, th: 0, rl: 0, cv: 0 } });
+  if (hadW) resize();   // volta ao tamanho de mundo da própria tela
+}
 const netSend = (c, m) => { try { if (c && c.open) c.send(m); } catch (e) {} };
 const netAll = m => { for (const id in NET.conns) netSend(NET.conns[id], m); };
 const roomSync = () => netAll({ t: 'room', players: NET.players, snap: NET.snap });
@@ -2544,8 +2551,9 @@ function hostRecv(c, m) {
     NET.conns[id] = c; if (!NET.players.some(p => p.id === id)) NET.players.push({ id, char: clamp(+m.char | 0, 0, CHARS.length - 1), ready: false });
     roomSync();
   } else if (m.t === 'ready') { const p = NET.players.find(q => q.id === id); if (p) { p.ready = !!m.v; roomSync(); } }
+  else if (m.t === 'in' && NET.rin[id]) { const r = NET.rin[id], c = v => clamp(+v || 0, -2, 2); Object.assign(r, { mx: c(m.mx), my: c(m.my), aim: +m.aim || 0, down: !!m.down, pk: !!m.pk, clk: m.clk | 0, it: m.it | 0, th: m.th | 0, rl: m.rl | 0, cv: m.cv | 0 }); }
 }
-function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); roomSync(); }
+function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); if (NET.online) { NET.guests = NET.guests.filter(g => g.id !== id); for (const b of bots) if (b.cid === id) b.remote = false; } roomSync(); }   // quem sai no meio da partida vira bot
 function kickPlayer(id) { const c = NET.conns[id]; if (c) { netSend(c, { t: 'kick' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); } hostDrop(id); }
 function joinRoom(code) {
   netReset(); Object.assign(NET, { err: '', msg: 'CONECTANDO...', busy: true, code });
@@ -2559,7 +2567,7 @@ function joinRoom(code) {
     NET.me = id; const c = p.connect(PFX + code, { reliable: true }); NET.conns.host = c;
     c.on('open', () => { clearTimeout(to); opened = true; netSend(c, { t: 'hello', char: cfg.char }); });
     c.on('data', clientRecv);
-    c.on('close', () => { if (NET.peer === p && !NET.others) netAbort('O ANFITRIÃO FECHOU A SALA'); });
+    c.on('close', () => { if (NET.peer === p) netAbort('O ANFITRIÃO FECHOU A SALA'); });
   });
 }
 function clientRecv(m) {
@@ -2568,6 +2576,7 @@ function clientRecv(m) {
   else if (m.t === 'kick') netAbort('VOCÊ FOI REMOVIDO DA SALA');
   else if (m.t === 'full') netAbort('SALA CHEIA');
   else if (m.t === 'start') startOnline(m);
+  else if (m.t === 's') applySnap(m);
 }
 function toggleReady() {
   const me = NET.players.find(p => p.id === NET.me); if (!me) return;
@@ -2576,15 +2585,139 @@ function toggleReady() {
 function startRoom() {
   if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready)) return;
   const map = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map;
-  const m = { t: 'start', snap: NET.snap, map, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char) };
+  const m = { t: 'start', snap: NET.snap, map, world: { w: WW, h: WH }, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char) };
   netAll(m); startOnline(m);
 }
-function startOnline(m) {   // todos iniciam a mesma partida (mesmas regras e mapa); os outros jogadores entram com o personagem escolhido
-  Object.assign(cfg, m.snap); cfg.map = m.map; NET.others = m.chars.filter((c, i) => m.ids[i] !== NET.me);
-  soloSetup = false; startMatch();
+function startOnline(m) {   // todos entram na mesma partida: o anfitrião simula, os convidados recebem o jogo pela rede
+  Object.assign(cfg, m.snap); cfg.map = m.map; soloSetup = false; training = false;
+  NET.online = true; NET.mid = 0; NET.ci = Math.max(0, m.ids.indexOf(NET.me));
+  NET.guests = m.ids.map((id, i) => ({ id, char: m.chars[i], ci: i })).filter(g => g.id !== 'host');
+  if (NET.host) { NET.rin = {}; NET.guests.forEach(g => NET.rin[g.id] = { mx: 0, my: 0, aim: 0, down: false, pk: false, clk: 0, it: 0, th: 0, rl: 0, cv: 0 }); startMatch(); return; }
+  NET.cl = true; NET.world = m.world; WW = m.world.w; WH = m.world.h; curMap = MAPS[m.map]; buildCrates();
+  M = { round: 0, map: m.map, room: cfg.team, team: cfg.team > 0, sc: [0, 0], target: 0, time: 0, phase: '', phaseT: 0, left: 0, flashT: 0, last: null, beep: -1 };
+  decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; kills = 0; dmgFlash = 0; shake = 0;
+  matchTrack = cfg.music ? cfg.music - 1 : pickTrack();
+  player = makeFighter({ isPlayer: true, pal: CHARS[cfg.char], x: WW / 2, y: WH / 2 }); player.tx = player.x; player.ty = player.y; player.ta = 0; bots = []; NET.all = [player]; NET.rd = -1;
+  touch.ang = 0; updateCam(); setState('play');
 }
 function addDigit(d) { if (!NET.busy && JOIN.length < 4) { JOIN += d; NET.err = ''; } }
 function doJoin() { if (JOIN.length === 4 && !NET.busy) joinRoom(JOIN); }
+
+/* ---- PARTIDA ONLINE: o anfitrião simula tudo; os convidados mandam os controles e desenham o que o anfitrião envia (30x por segundo) ---- */
+const FK = ['x', 'y', 'vx', 'vy', 'angle', 'hp', 'maxHp', 'stun', 'stunMax', 'fallDir', 'weapon', 'mag', 'reserve', 'reloadT', 'reloadMax', 'kick', 'flash', 'hitFlash', 'twist', 'walk', 'swing', 'peekK', 'leanS', 'coverBlock', 'team', 'dead'];
+const rn = v => typeof v === 'number' ? Math.round(v * 100) / 100 : v;
+/* ANFITRIÃO: lutador controlado por um amigo (usa os controles recebidos no lugar da IA do bot) */
+function remoteStep(b, dt) {
+  const r = b.rin, L = b.rl || (b.rl = { clk: r.clk, it: r.it, th: r.th, rl: r.rl, cv: r.cv });
+  if (r.clk !== L.clk) { L.clk = r.clk; b.rbuf = .15; }
+  const act = r.it !== L.it, thr = r.th !== L.th, rel = r.rl !== L.rl; if (r.cv !== L.cv) { L.cv = r.cv; b.coverReq = true; }
+  L.it = r.it; L.th = r.th; L.rl = r.rl; b.rbuf = Math.max(0, (b.rbuf || 0) - dt);
+  if (act) {
+    let best = null, bd = 46; for (const pk of pickups) { const q = Math.hypot(pk.x - b.x, pk.y - b.y); if (q < bd) { bd = q; best = pk; } }
+    if (best) { if (b.weapon === best.key) b.reserve += best.mag + best.reserve; else { dropWeapon(b); giveWeapon(b, best.key, best.mag, best.reserve); } pickups.splice(pickups.indexOf(best), 1); }
+  }
+  const w = b.weapon && WEAPONS[b.weapon], it = { mx: r.mx, my: r.my, aim: r.aim, fire: !!w && (r.down || b.rbuf > 0), punch: !w && b.rbuf > 0, reload: rel, throw: thr };
+  updateCover(b, it, dt); b.coverReq = false; updateFighter(b, dt, it);
+}
+function assignRemotes() {   // a cada rodada, cada amigo assume um lutador (em times, os amigos ficam em times opostos)
+  if (!(NET.host && NET.online) || training) return; const used = new Set();
+  NET.guests.forEach((g, k) => {
+    const want = M && M.team ? (k + 1) % 2 : null;
+    const b = bots.find(x => !used.has(x) && (want === null || x.team === want)) || bots.find(x => !used.has(x)); if (!b) return; used.add(b);
+    Object.assign(b, { remote: true, cid: g.id, ci: g.ci, pal: CHARS[g.char], hp: 100, maxHp: 100, speed: C.moveSpeed, punchDmg: C.punchDamage, rin: NET.rin[g.id], rl: null, rbuf: 0, coverReq: false });
+  });
+}
+function netSnap() {
+  const all = [player, ...bots];
+  return { t: 's', rd: NET.mid * 1000 + M.round, st: state === 'mend' ? 'mend' : 'play',
+    o: all.map(f => f.isPlayer ? 0 : f.remote ? f.ci : -1), c: all.map(f => CHARS.indexOf(f.pal)),
+    f: all.map(f => [...FK.map(k => rn(f[k])), rn(f.punch.left.t), f.punch.left.heavy ? 1 : 0, rn(f.punch.right.t), f.punch.right.heavy ? 1 : 0, f.cover ? [f.cover.nx, f.cover.ny] : 0, rn(f.coverOff.x), rn(f.coverOff.y)]),
+    b: bullets.map(b => [b.id, rn(b.x), rn(b.y), rn(b.vx), rn(b.vy)]),
+    th: thrown.map(t => [rn(t.x), rn(t.y), rn(t.vx), rn(t.vy), rn(t.rot), t.key, t.spin]),
+    pk: pickups.map(p => [rn(p.x), rn(p.y), p.key, p.mag, p.reserve, rn(p.t)]),
+    m: [M.round, M.phase, rn(M.phaseT), rn(M.left), M.sc, M.target, M.last ? [all.indexOf(M.last.w), M.last.wt, M.last.why] : 0], ev: NET.ev };
+}
+function netTick(dt) {
+  if (!NET.online || !NET.host || !M) return;
+  NET.acc += dt; if (NET.acc < 1 / 30) return; NET.acc = 0;
+  const S = netSnap(); NET.ev = []; netAll(S);
+}
+/* CONVIDADO: reconstrói os lutadores quando começa a rodada e depois só aplica o que o anfitrião mandou */
+function cliBuild(S) {
+  const newRound = S.rd !== NET.rd; NET.rd = S.rd; const mi = Math.max(0, S.o.indexOf(NET.ci));
+  NET.all = S.f.map((v, i) => { const f = makeFighter({ isPlayer: i === mi, pal: CHARS[S.c[i]] }); applyF(f, v, true); return f; });
+  player = NET.all[mi]; bots = NET.all.filter(f => f !== player);
+  if (newRound) { decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; }
+  updateCam();
+}
+function applyF(f, v, init) {
+  const n = FK.length, hp0 = f.hp, dead0 = f.dead;
+  FK.forEach((k, i) => {
+    if (k === 'x') f.tx = v[i]; else if (k === 'y') f.ty = v[i]; else if (k === 'angle') f.ta = v[i];
+    else if (k === 'team') f.team = M.team ? (v[i] === NET.myTeam ? 0 : 1) : v[i];
+    else if (k !== 'walk' || init) f[k] = v[i];
+  });
+  if (init) { f.x = f.tx; f.y = f.ty; f.angle = f.ta; }
+  f.punch.left.t = v[n]; f.punch.left.heavy = !!v[n + 1]; f.punch.right.t = v[n + 2]; f.punch.right.heavy = !!v[n + 3];
+  f.cover = v[n + 4] ? { nx: v[n + 4][0], ny: v[n + 4][1], gap: 0 } : null; f.isCovered = !!f.cover; f.coverOff = { x: v[n + 5], y: v[n + 6] };
+  if (init) return;
+  if (f.hp < hp0 - .01) {   // levou dano: sangue e faíscas (e tela vermelha se for você)
+    for (let i = 0; i < 3; i++) addDecal(f.x + rnd(-10, 10), f.y + rnd(-10, 10), rnd(2, 5));
+    for (let i = 0; i < 5; i++) { const a = rnd(0, TAU), s = rnd(120, 300); sparks.push({ x: f.x, y: f.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1 }); }
+    if (f.isPlayer) { dmgFlash = .45; shake = Math.max(shake, 5); }
+  }
+  if (f.dead && !dead0) { for (let i = 0; i < 12; i++) addDecal(f.x + rnd(-18, 18), f.y + rnd(-18, 18), rnd(3, 9)); if (f.isPlayer) shake = 10; }
+}
+function applySnap(S) {
+  if (!NET.cl || !M) return;
+  NET.myTeam = S.f[Math.max(0, S.o.indexOf(NET.ci))][FK.indexOf('team')];
+  if (S.rd !== NET.rd || S.f.length !== NET.all.length) cliBuild(S);
+  S.f.forEach((v, i) => applyF(NET.all[i], v, false));
+  const old = new Map(bullets.map(b => [b.id, b]));
+  bullets = S.b.map(([id, x, y, vx, vy]) => { let b = old.get(id); if (!b) { const tr = { pts: [{ x, y, t: btClock }] }; btrails.push(tr); b = { id, tr, life: 9 }; } b.x = x; b.y = y; b.vx = vx; b.vy = vy; return b; });
+  thrown = S.th.map(([x, y, vx, vy, rot, key, spin]) => ({ x, y, vx, vy, rot, key, spin }));
+  pickups = S.pk.map(([x, y, key, mag, reserve, t]) => ({ x, y, key, mag, reserve, t }));
+  const [round, ph, pt, left, sc, tg, last] = S.m, prev = M.phase;
+  if (ph !== prev) { if (ph === 'map') sfxBeep(330, .18); if (ph === 'count') M.beep = -1; if (ph === 'fight') { M.flashT = 1; sfxHorn(); } }
+  Object.assign(M, { round, phase: ph, phaseT: pt, left, target: tg, sc: M.team ? [sc[NET.myTeam], sc[1 - NET.myTeam]] : sc,
+    last: last ? { w: NET.all[last[0]] || null, wt: M.team && last[1] >= 0 ? (last[1] === NET.myTeam ? 0 : 1) : last[1], why: last[2] } : null });
+  for (const e of S.ev) if (e[0] === 's') sfxGun(e[1], clamp(1 - Math.hypot(e[2] - player.x, e[3] - player.y) / 900, .15, 1));
+  if (S.st === 'mend' && state === 'play') setState('mend'); else if (S.st !== 'mend' && state === 'mend') setState('play');
+}
+function netSendInput(dt) {
+  NET.ia += dt; if (NET.ia < 1 / 30) return; NET.ia = 0;
+  const k = input.keys, idle = state !== 'play';
+  let mx = (k[KEYS.right] || k.ArrowRight ? 1 : 0) - (k[KEYS.left] || k.ArrowLeft ? 1 : 0), my = (k[KEYS.down] || k.ArrowDown ? 1 : 0) - (k[KEYS.up] || k.ArrowUp ? 1 : 0);
+  if (touch.move.id !== null) { mx += touch.move.dx; my += touch.move.dy; }
+  netSend(NET.conns.host, { t: 'in', mx: idle ? 0 : +mx.toFixed(2), my: idle ? 0 : +my.toFixed(2), aim: +NET.aim.toFixed(3), down: !idle && !!input.down,
+    pk: !idle && (!!input.peek || Object.values(touch.btn).includes('M')), ...NET.cnt });
+}
+function clientStep(dt) {
+  btClock += dt; input.buffer = Math.max(0, input.buffer - dt);
+  if (state === 'play') {   // ações de um toque viram contadores (não se perdem entre um pacote e outro)
+    if (input.buffer > NET.lb + .05) NET.cnt.clk++;
+    if (input.interact) NET.cnt.it++; if (input.throwReq) NET.cnt.th++; if (input.reloadReq) NET.cnt.rl++; if (input.coverReq) NET.cnt.cv++;
+  }
+  NET.lb = input.buffer; input.interact = input.throwReq = input.reloadReq = input.coverReq = false;
+  const k = 1 - Math.exp(-dt * 22);
+  for (const f of NET.all) {
+    f.x += (f.tx - f.x) * k; f.y += (f.ty - f.y) * k; f.angle += angDiff(f.ta, f.angle) * k; f.walk += Math.hypot(f.vx, f.vy) * dt * .065;
+    f.kick = Math.max(0, f.kick - dt * 70); f.flash = Math.max(0, f.flash - dt); f.hitFlash = Math.max(0, f.hitFlash - dt);
+    for (const h of ['left', 'right']) { const p = f.punch[h]; if (p.t < 0) continue; p.t += dt / C.punchDuration; if (p.t >= 1) p.t = -1; else { const fl = fistLocal(f, h); if (fl.ext > .4) { const w = toWorld(f, fl.x, fl.y); trail.push({ x: w.x, y: w.y, life: 1, heavy: p.heavy }); } } }
+  }
+  if (!player.dead && player.stun <= 0) player.angle = NET.aim = TOUCH ? touch.ang : Math.atan2(input.my / ZOOM + cam.y - player.y, input.mx / ZOOM + cam.x - player.x);
+  netSendInput(dt);
+  for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; b.tr.pts.push({ x: b.x, y: b.y, t: btClock }); }
+  btrails = btrails.filter(r => btClock - r.pts[r.pts.length - 1].t < BTRAIL_LIFE);
+  for (const t of thrown) { const sp = Math.hypot(t.vx, t.vy), d = Math.exp(-C.throwDrag * dt); t.x += t.vx * dt; t.y += t.vy * dt; t.vx *= d; t.vy *= d; t.rot += t.spin * dt * Math.min(sp / 300, 1); }
+  player.near = null; let bd = 46; for (const pk of pickups) { const q = Math.hypot(pk.x - player.x, pk.y - player.y); if (q < bd) { bd = q; player.near = pk; } }
+  M.phaseT += dt; M.flashT = Math.max(0, M.flashT - dt); if (M.phase === 'fight') M.left = Math.max(0, M.left - dt);
+  if (M.phase === 'count') { const n = Math.floor(M.phaseT); if (n !== M.beep && n < 3) { M.beep = n; sfxBeep(n === 2 ? 880 : 660, .13); } }
+  shake = Math.max(0, shake - dt * 40); dmgFlash = Math.max(0, dmgFlash - dt);
+  for (const t of trail) t.life -= dt * 9; trail = trail.filter(t => t.life > 0);
+  for (const r of rings) { r.life -= dt * 6; r.r += dt * 140; } rings = rings.filter(r => r.life > 0);
+  for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= .9; s.vy *= .9; s.life -= dt * 5; } sparks = sparks.filter(s => s.life > 0);
+}
 
 function drawRoom(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', GREEN = '#8fd6a4';
@@ -2634,7 +2767,7 @@ function drawJoin(t) {
 /* ---------------------------- GAME LOOP ------------------------------- */
 let last = performance.now();
 function loop(now) {
-  let dt = Math.min((now - last) / 1000, .05); last = now; ui = [];
+  let dt = Math.min((now - last) / 1000, .05); last = now; ui = []; const rdt = dt;
   updateMusic();
   if (state === 'intro') { if (!introGate) introT += dt; drawIntro(introT); }
   else if (state === 'train') { menuT += dt; drawTrain(menuT); }
@@ -2651,10 +2784,13 @@ function loop(now) {
   else {
     menuT += dt;
     if (hitStop > 0) { hitStop -= dt; dt = 0; }   // hit stop no impacto do soco
-    let frozen = state === 'pause';   // pausado: tudo congelado
+    if (NET.cl) clientStep(rdt);
+    else {
+    let frozen = state === 'pause' && !NET.online;   // pausado: tudo congelado
     if (!frozen && M && !training) { const r = stepMatch(dt); if (r < 0) frozen = true; else dt = r; }   // contagem, rodadas e relógio
     if (frozen) { input.interact = input.throwReq = input.reloadReq = input.coverReq = input.down = false; } else updatePlay(dt);
-    updateCam();
+    }
+    updateCam(); netTick(rdt);
     ctx.save();
     ctx.scale(ZOOM, ZOOM);
     if (shake > 0) ctx.translate(rnd(-.5, .5) * shake, rnd(-.5, .5) * shake);
