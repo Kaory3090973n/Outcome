@@ -280,7 +280,8 @@ cfg.team = clamp(+cfg.team || 0, 0, 4);   // 0 = sala personalizada (todos contr
 const nBots = () => cfg.team > 0 ? cfg.team * 2 - 1 : cfg.bots + (NET.online ? NET.guests.length : 0);   // 1v1: 1 bot | 2v2: 3 bots | 3v3: 5 | 4v4: 7
 let soloSetup = false;   // true = a tela de configuração é a do SOLITÁRIO (só mapa e armas)
 const saveCfg = () => { try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {} };
-let ZOOM = 1.4;              // zoom do mapa/personagens (no celular se adapta à altura da tela)
+const VIEW_W = 1200, VIEW_H = 675;   // área do mapa que TODO jogador de PC enxerga (em unidades), em qualquer tamanho de tela
+let ZOOM = 1.4;              // zoom do mapa/personagens (PC: calculado para a visão ser igual; celular: se adapta à altura da tela)
 const TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const touch = { move: { id: null, ox: 0, oy: 0, x: 0, y: 0, dx: 0, dy: 0 }, aim: { id: null, ox: 0, oy: 0, x: 0, y: 0 }, ang: 0, btn: {} };
 const uiScale = () => clamp(Math.min(innerHeight / 640, innerWidth / 560), .5, 1);   // menus se encolhem em telas pequenas
@@ -450,9 +451,10 @@ function resize() {
   const s = document.createElement('canvas'); s.width = 4; s.height = 4;
   const g = s.getContext('2d'); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, 0, 4, 1);
   scan = ctx.createPattern(s, 'repeat');
-  fog = ctx.createRadialGradient(0, 0, Math.min(innerWidth, innerHeight) * .28, 0, 0, Math.max(innerWidth, innerHeight) * .55);   // campo de visão limitado ao redor do personagem
+  ZOOM = TOUCH ? clamp(innerHeight / 380, 1, 1.6) : clamp(Math.min(innerWidth / VIEW_W, innerHeight / VIEW_H), .6, 3);   // PC: mesma área visível em telas pequenas e grandes
+  const fogIn = TOUCH ? Math.min(innerWidth, innerHeight) * .28 : VIEW_H * ZOOM * .28, fogOut = TOUCH ? Math.max(innerWidth, innerHeight) * .55 : VIEW_W * ZOOM * .55;   // o campo de visão também acompanha a área fixa
+  fog = ctx.createRadialGradient(0, 0, fogIn, 0, 0, fogOut);   // campo de visão limitado ao redor do personagem
   fog.addColorStop(0, 'rgba(4,4,8,0)'); fog.addColorStop(1, 'rgba(4,4,8,.88)');
-  ZOOM = TOUCH ? clamp(innerHeight / 380, 1, 1.6) : 1.6;
   VW = innerWidth / ZOOM; VH = innerHeight / ZOOM; WW = VW * MAPK; WH = VH * MAPK; if (NET.world) { WW = NET.world.w; WH = NET.world.h; }
   buildCrates();
 }
@@ -1406,6 +1408,32 @@ function drawFx() {
   ctx.globalCompositeOperation = 'source-over';
 }
 
+/* -------- PAINEL SUPERIOR DIREITO: FPS e MS (tempo de cada quadro) + placar, tudo em branco -------- */
+const PERF = { fps: 0, ms: 0, acc: 0, n: 0 };
+function perfTick(ms) { PERF.acc += ms; PERF.n++; if (PERF.acc >= 500) { PERF.ms = PERF.acc / PERF.n; PERF.fps = 1000 / PERF.ms; PERF.acc = PERF.n = 0; } }
+function drawTopRight() {
+  if (!player) return;
+  const W = innerWidth, pw = 190, R = W - (TOUCH ? 76 : 16), x = R - pw, pad = 13, inMatch = M && !training, rows = [{ k: 'perf', h: 22 }];
+  if (inMatch) {
+    rows.push({ k: 'sep', h: 10 });
+    if (M.team) { rows.push({ k: 'score', label: 'SEU TIME', v: M.sc[0], col: '#8fd6a4', h: 24 }, { k: 'score', label: 'INIMIGOS', v: M.sc[1], col: '#ff7a6b', h: 24 }, { k: 'sep', h: 10 }); for (const f of [player, ...bots]) rows.push({ k: 'name', f, h: 18 }); }
+    else for (const f of [player, ...bots]) rows.push({ k: 'ffa', f, h: 19 });
+  }
+  const total = rows.reduce((a, r) => a + r.h, 0) + pad * 2 - 6;
+  ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.roundRect(x, 12, pw, total, 14); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x + .5, 12.5, pw - 1, total - 1, 14); ctx.stroke();
+  const dot = (cx, cy, col, a) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; };
+  let y = 12 + pad - 3;
+  for (const r of rows) {
+    const cy = y + r.h / 2 + 1, xl = x + pad, xr = x + pw - pad;
+    if (r.k === 'perf') { txt(PERF.fps ? `${Math.round(PERF.fps)} FPS` : '-- FPS', xl, cy, 12, '#fff', 'left'); txt(PERF.ms ? `${PERF.ms.toFixed(1)} MS` : '-- MS', xr, cy, 12, '#fff', 'right'); }
+    else if (r.k === 'sep') { ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(xl, y + r.h / 2, pw - pad * 2, 1); }
+    else if (r.k === 'score') { dot(xl + 4, cy, r.col, 1); txt(r.label, xl + 16, cy, 13, '#fff', 'left'); txt(String(r.v), xr, cy, 18, '#fff', 'right'); }
+    else if (r.k === 'name') { const f = r.f; dot(xl + 4, cy, f.team === player.team ? '#8fd6a4' : '#ff7a6b', f.dead ? .3 : 1); txt(fname(f), xl + 16, cy, 11, f.dead ? 'rgba(255,255,255,.35)' : '#fff', 'left'); }
+    else { const f = r.f; txt(fname(f), xl, cy, 12, f.dead ? 'rgba(255,255,255,.35)' : f.isPlayer ? '#fff' : 'rgba(255,255,255,.8)', 'left'); txt(String(M.sc[f.team]), xr, cy, 13, f.dead ? 'rgba(255,255,255,.35)' : '#fff', 'right'); }
+    y += r.h;
+  }
+}
 function drawHUD(t) {
   const W = innerWidth, H = innerHeight;
   if (player.stun > 0 && !player.dead) {   // aviso de nocaute
@@ -1415,9 +1443,9 @@ function drawHUD(t) {
     ctx.fillStyle = '#e7e4d3'; ctx.beginPath(); ctx.roundRect(W / 2 - 98, H - 72, 196 * clamp(player.stun / player.stunMax, 0, 1), 8, 4); ctx.fill();
   }
   // Vida
-  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(16, 16, 232, 22);
-  const pct = player.hp / player.maxHp;
-  ctx.fillStyle = pct > .5 ? '#4cf08a' : pct > .25 ? '#ffd23f' : '#ff3b5c'; ctx.fillRect(20, 20, 224 * pct, 14);
+  ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.roundRect(16, 16, 232, 22, 11); ctx.fill();
+  const pct = clamp(player.hp / player.maxHp, 0, 1);
+  if (pct > 0) { ctx.fillStyle = pct > .5 ? '#4cf08a' : pct > .25 ? '#ffd23f' : '#ff3b5c'; ctx.beginPath(); ctx.roundRect(20, 20, 224 * pct, 14, 7); ctx.fill(); }
   txt(`HP ${Math.ceil(player.hp)}`, 24, 27, 13, '#fff', 'left');
   if (training) { txt('MODO SOLITÁRIO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
   else { txt(`ABATES ${kills}`, 18, 56, 18, '#e7e4d3', 'left'); txt(`BOTS VIVOS ${bots.filter(b => !b.dead).length}/${bots.length}`, 18, 80, 14, 'rgba(255,255,255,.6)', 'left'); }
@@ -1473,7 +1501,7 @@ function drawHUD(t) {
   if (player.reloadT > 0) { ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x, y, 18, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - player.reloadT / player.reloadMax)); ctx.stroke(); }
   ctx.shadowBlur = 0;
   if (dmgFlash > 0) { ctx.fillStyle = `rgba(255,30,60,${dmgFlash * .5})`; ctx.fillRect(0, 0, W, H); }
-  drawMatchHUD();
+  drawTopRight(); drawMatchHUD();
   if (TOUCH && state === 'play') drawTouch();
 }
 
@@ -1624,75 +1652,6 @@ function drawTrain(t) {
 
 /* --------------------------- ESCOLHER MODO (1v1 ... 4v4) ---------------- */
 /* PERSONALIZADA -> ENTRAR e TUTORIAL -> TREINO: ao segurar o mouse sobre o cartão, a barrinha enche (~2 s) e o botão troca */
-/* ARTE BRANCA DOS CARTÕES 1v1..4v4: rachaduras, estilhaços, pinceladas, pontilhado e uma silhueta de arma por jogador (gerada por código, 1 vez por tamanho) */
-const MODE_ART = new Map();
-function modeArt(q, w, h, sc) {
-  const key = q + '|' + Math.round(w) + 'x' + Math.round(h) + '|' + sc.toFixed(2);
-  let c = MODE_ART.get(key); if (c) return c;
-  if (MODE_ART.size > 24) MODE_ART.clear();
-  c = document.createElement('canvas'); c.width = Math.max(2, Math.ceil(w * sc)); c.height = Math.max(2, Math.ceil(h * sc));
-  const g = c.getContext('2d'); g.scale(sc, sc);
-  let seed = q * 7919 + 13; const R = () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-  const ra = (a, b) => a + R() * (b - a), M = Math.min(w, h);
-  g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineCap = 'round';
-  const tri = (x1, y1, x2, y2, x3, y3) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.lineTo(x3, y3); g.closePath(); g.fill(); };
-  const burst = (cx, cy, n, len) => {   // impacto: raios afilados saindo de um ponto + miolo estrelado
-    for (let i = 0; i < n; i++) {
-      const a = ra(0, TAU), l = len * (.2 + Math.pow(R(), 1.6) * .8), wd = ra(.8, 5) * (M / 150), px = -Math.sin(a) * wd, py = Math.cos(a) * wd;
-      g.globalAlpha = ra(.25, .85); tri(cx + px, cy + py, cx - px, cy - py, cx + Math.cos(a) * l, cy + Math.sin(a) * l);
-    }
-    g.globalAlpha = 1; g.beginPath();
-    for (let i = 0; i < 14; i++) { const a = i / 14 * TAU, r = (i % 2 ? .35 : 1) * M * ra(.04, .08); g.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r); }
-    g.closePath(); g.fill();
-    for (let i = 0; i < 9; i++) {   // estilhaços soltos em volta
-      const a = ra(0, TAU), d = ra(.06, .3) * M, sz = ra(3, 11) * (M / 150), x = cx + Math.cos(a) * d, y = cy + Math.sin(a) * d;
-      g.globalAlpha = ra(.3, .8); tri(x, y, x + Math.cos(a + 1) * sz, y + Math.sin(a + 1) * sz, x + Math.cos(a - 1.2) * sz * 1.6, y + Math.sin(a - 1.2) * sz * 1.6);
-    }
-  };
-  const crack = (cx, cy, n) => {   // linhas finas e retas cruzando o cartão, como vidro trincado
-    g.lineWidth = Math.max(.7, M / 220);
-    for (let i = 0; i < n; i++) { const a = ra(0, TAU), l = ra(.5, 1.3) * Math.max(w, h); g.globalAlpha = ra(.15, .5); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); g.stroke(); }
-  };
-  const brush = (x, y, ang, len, thick) => {   // pincelada: corpo afilado com ponta irregular + cerdas
-    const ca = Math.cos(ang), sa = Math.sin(ang), nx = -sa, ny = ca;
-    g.globalAlpha = ra(.35, .6); g.beginPath(); g.moveTo(x, y);
-    const steps = 9; for (let i = 1; i <= steps; i++) { const t = i / steps, th = thick * Math.sin(Math.PI * Math.pow(t, .7)) * ra(.55, 1); g.lineTo(x + ca * len * t + nx * th, y + sa * len * t + ny * th); }
-    for (let i = steps; i >= 1; i--) { const t = i / steps, th = thick * Math.sin(Math.PI * Math.pow(t, .7)) * ra(.55, 1); g.lineTo(x + ca * len * t - nx * th, y + sa * len * t - ny * th); }
-    g.closePath(); g.fill();
-    g.lineWidth = Math.max(.8, thick / 12);
-    for (let i = 0; i < 14; i++) { const off = ra(-1.25, 1.25) * thick, l0 = ra(.1, .5) * len, l1 = ra(.7, 1.15) * len; g.globalAlpha = ra(.2, .65); g.beginPath(); g.moveTo(x + ca * l0 + nx * off, y + sa * l0 + ny * off); g.lineTo(x + ca * l1 + nx * off, y + sa * l1 + ny * off); g.stroke(); }
-  };
-  const halftone = (cx, cy, ang, len) => {   // pontilhado que some ao longo de uma direção
-    const sp = Math.max(5, M / 22), ca = Math.cos(ang), sa = Math.sin(ang);
-    for (let u = 0; u < len; u += sp) for (let v = -len * .35; v < len * .35; v += sp) {
-      const fade = 1 - u / len, spread = 1 - Math.abs(v) / (len * .35), r = sp * .5 * fade * spread; if (r < .5) continue;
-      g.globalAlpha = .55; g.beginPath(); g.arc(cx + ca * u - sa * v, cy + sa * u + ca * v, r, 0, TAU); g.fill();
-    }
-  };
-  // um impacto, uma pincelada e uma arma por jogador
-  const WEAPONS = [['python'], ['m1911', 'glock'], ['luger', 'deagle', 'python'], ['glock', 'm1911', 'deagle', 'luger']][q - 1];
-  const sizeW = w * [.72, .6, .5, .44][q - 1];
-  for (let i = 0; i < q; i++) {
-    const fx = w * (q === 1 ? .5 : .2 + .6 * i / (q - 1)), fy = h * (q === 1 ? .3 : (i % 2 ? .72 : .28)), ix = fx + ra(-.08, .08) * w, iy = fy + ra(-.08, .08) * h;
-    halftone(ix, iy, ra(0, TAU), M * .6);
-    brush(ix - ra(.1, .3) * w, iy + ra(-.2, .2) * h, ra(-.5, .5) + (i % 2 ? .3 : -.3), w * ra(.55, .9), M * ra(.05, .1));
-    crack(ix, iy, 7);
-    burst(ix, iy, 36, M * .9);
-  }
-  for (let i = 0; i < q; i++) {   // silhuetas (voltadas para lados opostos, como lados opostos da luta)
-    const sl = SIL[WEAPONS[i]], sc2 = sizeW / sl.w, fx = w * (q === 1 ? .5 : .2 + .6 * i / (q - 1)), fy = h * (q === 1 ? .27 : (i % 2 ? .76 : .24));
-    for (const [dx, dy, al] of [[3, 3, .22], [0, 0, .9]]) {
-      g.save(); g.translate(fx + dx, fy + dy); g.rotate(ra(-.45, .45) + (i % 2 ? .2 : -.2)); g.scale(i % 2 ? -sc2 : sc2, sc2); g.translate(-sl.w / 2, -sl.h / 2);
-      g.globalAlpha = al; g.fillStyle = '#fff'; g.fill(sl.p, 'evenodd'); g.restore();
-    }
-  }
-  g.globalAlpha = 1;
-  g.save(); g.translate(w / 2, h / 2); g.scale(Math.max(1.4, w / M * 1.25), 1);   // faixa escura (elipse larga) atrás do número para ele continuar legível
-  const vg = g.createRadialGradient(0, 0, 0, 0, 0, M * .36);
-  vg.addColorStop(0, 'rgba(13,13,17,.95)'); vg.addColorStop(.55, 'rgba(13,13,17,.8)'); vg.addColorStop(1, 'rgba(13,13,17,0)');
-  g.fillStyle = vg; g.fillRect(-w, -h, w * 2, h * 2); g.restore();
-  MODE_ART.set(key, c); return c;
-}
 const FLIP = { c: { p: 0, m: 0 }, t: { p: 0, m: 0 }, t0: 0 };
 function drawModes(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', GRN = '#8fd6a4', RED = '#ff7a6b';
@@ -1715,10 +1674,8 @@ function drawModes(t) {
   const go = q => () => { soloSetup = false; cfg.team = q; saveCfg(); setState('setup'); };
   const mode = (q, x, yy, w, h) => {   // cartão de partida: número grande + times (verde = seu time, vermelho = inimigos)
     const hov = over(x, yy, w, h); frame(x, yy, w, h, hov, 18);
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x + .5, yy + .5, w - 1, h - 1, 18); ctx.clip(); ctx.globalAlpha = hov ? 1 : .72; ctx.drawImage(modeArt(q, w, h, ctx.getTransform().a), x, yy, w, h); ctx.restore();
-    ctx.beginPath(); ctx.roundRect(x + .5, yy + .5, w - 1, h - 1, 18); ctx.strokeStyle = hov ? INK : 'rgba(255,255,255,.14)'; ctx.lineWidth = hov ? 2 : 1; ctx.stroke();
     const big = clamp(Math.min(w * .3, h * .38), 22, 64); ls(Math.round(big * .06));
-    txt(q + 'v' + q, x + w / 2, yy + h / 2, big, hov ? '#fff' : 'rgba(255,255,255,.92)', 'center'); ls(0);
+    txt(q + 'v' + q, x + w / 2, yy + h / 2, big, hov ? INK : 'rgba(231,228,211,.8)', 'center'); ls(0);
     if (hov) tip = TIPS[q]; ui.push({ x: x * k, y: yy * k, w: w * k, h: h * k, fn: go(q) });
   };
   const pill = (label, x, yy, w, h, fn, tp) => {
@@ -1828,12 +1785,6 @@ function drawMatchHUD() {
   ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.beginPath(); ctx.roundRect(W / 2 - 62, 12, 124, 40, 14); ctx.fill();
   txt(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`, W / 2, 33, 26, low && Math.floor(t * 4) % 2 ? '#ff5a5a' : INK, 'center');
   txt(`RODADA ${M.round}  ·  ${M.target ? 'META ' + M.target + ' PTS' : 'INFINITO'}`, W / 2, 66, 12, MUTE, 'center');
-  const px = W - (TOUCH ? 76 : 20); let py = 22;   // placar
-  if (M.team) {
-    txt(`SEU TIME  ${M.sc[0]}`, px, py, 13, '#8fd6a4', 'right'); py += 18;
-    txt(`INIMIGOS  ${M.sc[1]}`, px, py, 13, '#ff7a6b', 'right'); py += 22;
-    for (const f of [player, ...bots]) { txt(fname(f), px, py, 11, f.dead ? 'rgba(255,255,255,.3)' : f.team === player.team ? 'rgba(143,214,164,.9)' : 'rgba(255,122,107,.9)', 'right'); py += 15; }
-  } else for (const f of [player, ...bots]) { txt(`${fname(f)}  ${M.sc[f.team]}`, px, py, 12, f.dead ? 'rgba(255,255,255,.3)' : f.isPlayer ? INK : MUTE, 'right'); py += 17; }
   if (player.dead && M.phase === 'fight') txt('ELIMINADO · ESPECTANDO ATÉ A RODADA ACABAR', W / 2, H - 120, 16, '#ff7a6b', 'center');
   if (M.phase === 'map') {   // nome do mapa, antes da contagem
     const mp = MAPS[M.map], T = M.phaseT, a = clamp(T / .35, 0, 1) * clamp((MAP_INTRO - T) / .4, 0, 1), s = easeOutExpo(clamp(T / .8, 0, 1));
@@ -2237,10 +2188,14 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
-  { n: 37, v: '0.24.1', title: 'Arte branca nos cartões de partida',
+  { n: 37, v: '0.25.0', title: 'Visão justa, FPS e MS',
     criado: [
-      'Os cartões 1v1, 2v2, 3v3 e 4v4 ganharam uma arte de fundo toda em branco, feita pelo próprio jogo: rachaduras, estilhaços, pinceladas, pontilhado e uma silhueta de arma por jogador (1 no 1v1, 2 no 2v2, 3 no 3v3 e 4 no 4v4).',
-      'Ao passar o mouse a arte acende, e o número continua legível no centro.',
+      'Contador de FPS e de MS (tempo de cada quadro) no painel do canto superior direito, durante a partida e também no SOLITÁRIO.',
+    ],
+    modificado: [
+      'Visão justa no PC: o zoom agora é calculado pelo tamanho da tela, então todo mundo enxerga praticamente a mesma área do mapa. Antes o zoom era fixo e quem tinha tela maior enxergava muito mais. O campo de visão escuro ao redor do personagem também acompanha a área fixa.',
+      'Painel do canto superior direito redesenhado: caixa arredondada com tudo em branco, FPS e MS no topo, placar do seu time e dos inimigos com bolinha de cor e a lista de jogadores.',
+      'A barra de vida do canto superior esquerdo agora tem as bordas arredondadas.',
     ] },
   { n: 36, v: '0.24.0', title: 'Abas com barrinha na tela de modos',
     criado: [
@@ -2937,7 +2892,7 @@ function drawJoin(t) {
 /* ---------------------------- GAME LOOP ------------------------------- */
 let last = performance.now();
 function loop(now) {
-  let dt = Math.min((now - last) / 1000, .05); last = now; ui = []; const rdt = dt;
+  perfTick(now - last); let dt = Math.min((now - last) / 1000, .05); last = now; ui = []; const rdt = dt;
   updateMusic();
   if (state === 'intro') { if (!introGate) introT += dt; drawIntro(introT); }
   else if (state === 'train') { menuT += dt; drawTrain(menuT); }
