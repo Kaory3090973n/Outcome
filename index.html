@@ -526,7 +526,7 @@ function startGame(tr, keepKills) {
     pal: CHARS[cfg.char], team: 0 });
   if (inCrate(player.x, player.y, 30)) Object.assign(player, freeSpot());
   bots = [];
-  const pool = [...new Set([...(NET.others || []), ...CHARS.map((_, i) => i)])].filter(i => i !== cfg.char);   // bots usam os outros personagens
+  const hum = [cfg.char, ...(NET.online ? NET.guests.map(g => g.char) : [])]; let pool = [...new Set([...(NET.others || []), ...CHARS.map((_, i) => i)])].filter(i => !hum.includes(i)); if (!pool.length) pool = CHARS.map((_, i) => i);   // bots usam os personagens que nenhum jogador escolheu
   const tm = !training && M && M.team;   // partida por times: os primeiros (n-1) bots são aliados do jogador
   for (let i = 0; !training && i < nBots(); i++) { const b = { pal: CHARS[pool[i % pool.length]], pid: i + 1, team: tm ? (i < M.room - 1 ? 0 : 1) : i + 1 }; spawnBot(b); bots.push(b); }
   {   // quantidade de loot escolhida na configuração (pouca / média / alta), também no solitário
@@ -1575,7 +1575,7 @@ function drawSetupPre() {
   ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), cyc = (v, m, d) => (v + d + m) % m;
-  const wide = IW >= 900, tot = Math.min(IW - 40, 1080), pw = wide ? Math.round(tot * .54) : tot, rcw = wide ? tot - pw - 40 : tot;
+  const noMap = !solo, wide = IW >= 900, tot = Math.min(IW - 40, 1080), pw = wide ? Math.round(tot * .54) : tot, rcw = noMap ? Math.min(IW - 40, 480) : wide ? tot - pw - 40 : tot;   // salas: sem escolha de mapa (a votação acontece depois de criar a sala)
   const cyc2 = cyc, fmt = sec => sec >= 60 ? (sec / 60) + ' MIN' + (sec % 60 ? ' ' + sec % 60 + 'S' : '') : sec + ' S';
   const diffR = ['DIFICULDADE', DIFFS[cfg.diff].name, () => cfg.diff = Math.max(0, cfg.diff - 1), () => cfg.diff = Math.min(2, cfg.diff + 1)];
   const lootR = ['ARMAS', LOOTS[cfg.loot].name, () => cfg.loot = cyc2(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, 1)];
@@ -1592,15 +1592,15 @@ function drawSetupPre() {
   ];
   const R = rows.length;
   const f = clamp((pw - 110) / 398, .6, 1), selW = 150 * f, selH = 104 * f, sdW = 108 * f, sdH = 76 * f;
-  const rh = R > 3 ? 44 : 56, rgMin = R > 3 ? 12 : 20, rowsMin = R * rh + (R - 1) * rgMin, ph = Math.max(Math.round(46 + selH + 74), wide ? rowsMin : 0), rg = wide && R > 1 ? (ph - R * rh) / (R - 1) : rgMin, rowsH = wide ? ph : rowsMin;
+  const rh = R > 3 ? 44 : 56, rgMin = R > 3 ? 12 : 20, rowsMin = R * rh + (R - 1) * rgMin, ph = noMap ? 0 : Math.max(Math.round(46 + selH + 74), wide ? rowsMin : 0), rg = noMap ? rgMin + 4 : wide && R > 1 ? (ph - R * rh) / (R - 1) : rgMin, rowsH = noMap ? R * rh + (R - 1) * rg : wide ? ph : rowsMin;
   const descH = pre || solo ? 0 : 30;
-  const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + (wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
+  const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
   const y0 = Math.max(14, (IH - contH) / 2), px = cx - tot / 2, py = y0 + ts + 34;
   // título (mesmo estilo das outras telas)
   try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
   txt(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : 'SALA PERSONALIZADA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
   try { ctx.letterSpacing = '0px'; } catch (e) {}
-  // painel do mapa (carrossel)
+  if (!noMap) {   // painel do mapa (carrossel): só no SOLITÁRIO
   ctx.beginPath(); ctx.roundRect(px + .5, py + .5, pw - 1, ph - 1, 16); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
   const pcx = px + pw / 2;
   txt('MAPA', pcx, py + 28, 20, INK, 'center');
@@ -1619,9 +1619,9 @@ function drawSetupPre() {
   chevBtn(px + 12, cyT - 20, 40, -1, () => pick(li), k); chevBtn(px + pw - 52, cyT - 20, 40, 1, () => pick(ri), k);
   { const dy = py + ph - 20, sp = 30, dx0 = pcx - (N - 1) * sp / 2;
     for (let i = 0; i < N; i++) { const dx = dx0 + i * sp; ctx.beginPath(); ctx.arc(dx, dy, 5.5, 0, TAU); if (i === sel) { ctx.fillStyle = INK; ctx.fill(); } else { ctx.strokeStyle = 'rgba(231,228,211,.7)'; ctx.lineWidth = 1.5; ctx.stroke(); }
-      ui.push({ x: (dx - 14) * k, y: (dy - 14) * k, w: 28 * k, h: 28 * k, fn: () => pick(i) }); } }
+      ui.push({ x: (dx - 14) * k, y: (dy - 14) * k, w: 28 * k, h: 28 * k, fn: () => pick(i) }); } } }
   // linhas de opções
-  const rx = wide ? px + pw + 40 : px, ry0 = (wide ? py : py + ph + 28) + (wide && R === 1 ? (ph - rh) / 2 : 0);
+  const rx = noMap ? cx - rcw / 2 : wide ? px + pw + 40 : px, ry0 = noMap ? py : (wide ? py : py + ph + 28) + (wide && R === 1 ? (ph - rh) / 2 : 0);
   const lw = 130, va = rx + lw + rh, vb = rx + rcw - rh;
   rows.forEach(([label, val, prev, next], i) => {
     const ry = ry0 + i * (rh + rg);
@@ -1630,14 +1630,14 @@ function drawSetupPre() {
     if (next) chevBtn(rx + rcw - rh, ry, rh, 1, next, k);
     txt(val, (va + vb) / 2, ry + rh / 2 + 1, 18, prev ? INK : MUTE, 'center');
   });
-  const by = py + (wide ? ph : ph + 28 + rowsH) + descH + 40;
+  const by = py + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40;
   if (!pre && !solo) txt(cfg.mode ? 'Infinito: as rodadas não acabam, só o placar sobe. Esc sai da partida.' : `Clássico: vence a partida quem chegar primeiro a ${PTS[cfg.pts]} pontos (1 ponto por rodada).`, cx, by - 36, 11, '#5c5c68', 'center');
   button(solo ? 'COMEÇAR' : 'CRIAR SALA', cx - 140, by, 280, 56, startSetup, 'primary');
   cornerBtn('VOLTAR', -1, IW, IH, () => setState(solo ? 'train' : 'modes'));
   ctx.restore();
 }
 
-const startSetup = () => { saveCfg(); if (soloSetup) startGame(true); else createRoom(); };
+const startSetup = () => { saveCfg(); if (soloSetup) { cfg.char = Math.floor(Math.random() * CHARS.length); startGame(true); } else createRoom(); };   // solitário: personagem sorteado
 function drawSetup(t) { drawSetupPre(); }   // predefinidos e sala personalizada usam a mesma tela (muda só a lista de opções)
 
 /* --------------------------- TREINAMENTO: TREINAMENTO | BOTS ------------ */
@@ -2174,7 +2174,7 @@ function drawChars(t) {
     const x = tx0 + i * tw, on = i === chIdx, hov = input.mx / ms > x && input.mx / ms < x + tw - 6 && input.my / ms > 70 && input.my / ms < 106;
     ctx.beginPath(); ctx.roundRect(x + .5, 70.5, tw - 7, 35, 10); ctx.fillStyle = on ? q.accent + '44' : hov ? 'rgba(255,255,255,.1)' : 'rgba(255,255,255,.03)'; ctx.fill();
     ctx.strokeStyle = on ? q.accent : 'rgba(255,255,255,.25)'; ctx.lineWidth = 1; ctx.stroke();
-    txt((cfg.char === i ? '• ' : '') + q.name, x + (tw - 6) / 2, 89, tw < 110 ? 10 : 12, on ? '#fff' : 'rgba(255,255,255,.7)', 'center');
+    txt(q.name, x + (tw - 6) / 2, 89, tw < 110 ? 10 : 12, on ? '#fff' : 'rgba(255,255,255,.7)', 'center');
     ui.push({ x: x * ms, y: 70 * ms, w: (tw - 6) * ms, h: 36 * ms, fn: () => { chIdx = i; } });
   });
   ctx.save(); ctx.beginPath(); ctx.rect(lx - bw / 2, 110, bw, base - 110); ctx.clip(); ctx.translate(lx, base + Math.sin(t * 1.6) * 1.5); ctx.scale(sc, sc); drawBust(P); ctx.restore();
@@ -2183,8 +2183,7 @@ function drawChars(t) {
   const rx = wide ? W * .53 : 24, rw = wide ? W * .42 : W - 48; let y = wide ? 170 : base + 24;
   txt(P.name, rx, y, clamp(W / 40, 24, 38), P.accent, 'left'); txt(P.alias, rx, y + 32, 14, '#e7e4d3', 'left');
   const bioEnd = wrapTxt(P.bio, rx, y + 66, rw, 22, 14, 'rgba(255,255,255,.82)');
-  const by = H - 80, used = cfg.char === chIdx;
-  button(used ? 'SELECIONADO' : 'SELECIONAR', wide ? rx : cx - 110, Math.min(wide ? Math.max(base - 50 * sc, bioEnd + 24) : bioEnd + 24, H - 146), 220, 46, () => { cfg.char = chIdx; try { localStorage.setItem('wc_char', cfg.char); } catch (e) {} }, used ? undefined : 'primary');
+  const by = H - 80;
   button('<', cx - 68, by, 60, 46, () => { chIdx = (chIdx + n - 1) % n; });
   cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
   button('>', cx + 8, by, 60, 46, () => { chIdx = (chIdx + 1) % n; });
@@ -2198,6 +2197,24 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 46, v: '0.28.0', title: 'Votação de mapa e escolha de personagem',
+    criado: [
+      'Depois que o anfitrião toca em INICIAR PARTIDA (com todos prontos), aparece a votação de MAPA para todos da sala: os três mapas e a opção ALEATÓRIO, com 12 segundos de tempo. Bolinhas coloridas mostram quem votou em cada um.',
+      'Regras da votação: vence o mapa com mais votos. Se ninguém votar, ou se ALEATÓRIO tiver a maioria, o mapa é sorteado. Empate sorteia entre os empatados. O mapa escolhido aparece por um instante antes de seguir.',
+      'Em seguida vem a escolha de PERSONAGEM, no estilo da imagem de referência: o personagem de cada jogador aparece em cima (você à esquerda) e a grade de rostos fica embaixo, com o ? do aleatório no meio. São 25 segundos.',
+      'Para escolher é preciso clicar duas vezes: o 1º clique marca o personagem e o 2º confirma. Quem confirma primeiro fica com ele, e ele fica bloqueado para os outros, com o nome de quem pegou. Se o tempo acabar, o personagem marcado é confirmado (ou sorteado, se já tiver sido pego).',
+      'Quem confirmar ALEATÓRIO espera os outros escolherem. Então o jogo passa de personagem em personagem, desacelera e para em um dos que sobraram. Com o sorteio feito, a partida começa.',
+    ],
+    modificado: [
+      'A configuração da sala (predefinida e personalizada) não tem mais o painel de mapa. O SOLITÁRIO continua com a escolha de mapa.',
+      'A tela PERSONAGENS do menu agora é só informativa: dá para ver e conhecer todos, mas não selecionar.',
+      'Os bots usam apenas personagens que nenhum jogador escolheu.',
+      'Na sala os jogadores aparecem como ANFITRIÃO e JOGADOR 2, 3..., já que o personagem passou a ser escolhido na seleção.',
+      'No SOLITÁRIO o personagem é sorteado. Sala em seleção ou em partida recusa novos jogadores (PARTIDA EM ANDAMENTO).',
+    ],
+    removido: [
+      'O botão SELECIONAR da tela PERSONAGENS e a marca do personagem em uso.',
+    ] },
   { n: 45, v: '0.27.0', title: 'Times verde e vermelho nas salas predefinidas',
     criado: [
       'Nas salas predefinidas (1v1 a 4v4) os jogadores ficam separados em dois times, lado a lado e afastados: TIME VERDE à esquerda e TIME VERMELHO à direita, cada um com as vagas do formato da partida.',
@@ -2712,7 +2729,7 @@ function drawDead() {
 const PFX = 'outcome-game-';
 function netReset() { try { if (NET.peer) NET.peer.destroy(); } catch (e) {} const hadW = !!NET.world;
   Object.assign(NET, { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', busy: false, snap: null, others: null, copied: false,
-    online: false, cl: false, ci: 0, all: [], guests: [], rin: {}, ev: [], mid: 0, acc: 0, ia: 0, rd: -1, lb: 0, aim: 0, myTeam: 0, pick: null, world: null, cnt: { clk: 0, it: 0, th: 0, rl: 0, cv: 0 } });
+    online: false, cl: false, ci: 0, all: [], guests: [], rin: {}, ev: [], mid: 0, acc: 0, ia: 0, rd: -1, lb: 0, aim: 0, myTeam: 0, pick: null, world: null, sel: null, cnt: { clk: 0, it: 0, th: 0, rl: 0, cv: 0 } });
   if (hadW) resize();   // volta ao tamanho de mundo da própria tela
 }
 const netSend = (c, m) => { try { if (c && c.open) c.send(m); } catch (e) {} };
@@ -2738,15 +2755,18 @@ function openRoom(tries) {
 function hostRecv(c, m) {
   if (!m || typeof m !== 'object') return; const id = c.peer;
   if (m.t === 'hello') {
+    if ((NET.sel || NET.online) && !NET.players.some(p => p.id === id)) { netSend(c, { t: 'busy' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); return; }
     if (NET.players.length >= NET.cap && !NET.players.some(p => p.id === id)) { netSend(c, { t: 'full' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); return; }
     NET.conns[id] = c; if (!NET.players.some(p => p.id === id)) NET.players.push({ id, char: clamp(+m.char | 0, 0, CHARS.length - 1), ready: false, team: -1 });
     roomSync();
   } else if (m.t === 'ready') { const p = NET.players.find(q => q.id === id); if (p && (!(NET.snap && NET.snap.team > 0) || p.team >= 0)) { p.ready = !!m.v; roomSync(); } }
   else if (m.t === 'team') setTeamOf(id, m.v | 0);
   else if (m.t === 'swap') swapTeams(id, String(m.with));
+  else if (m.t === 'vote') selVote(id, m.v);
+  else if (m.t === 'pick') selPick(id, m.c);
   else if (m.t === 'in' && NET.rin[id]) { const r = NET.rin[id], c = v => clamp(+v || 0, -2, 2); Object.assign(r, { mx: c(m.mx), my: c(m.my), aim: +m.aim || 0, down: !!m.down, pk: !!m.pk, clk: m.clk | 0, it: m.it | 0, th: m.th | 0, rl: m.rl | 0, cv: m.cv | 0 }); }
 }
-function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); if (NET.online) { NET.guests = NET.guests.filter(g => g.id !== id); for (const b of bots) if (b.cid === id) b.remote = false; } roomSync(); }   // quem sai no meio da partida vira bot
+function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); if (NET.sel) selDrop(id); if (NET.online) { NET.guests = NET.guests.filter(g => g.id !== id); for (const b of bots) if (b.cid === id) b.remote = false; } roomSync(); }   // quem sai no meio da partida vira bot
 function kickPlayer(id) { const c = NET.conns[id]; if (c) { netSend(c, { t: 'kick' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); } hostDrop(id); }
 function joinRoom(code) {
   netReset(); Object.assign(NET, { err: '', msg: 'CONECTANDO...', busy: true, code });
@@ -2768,6 +2788,8 @@ function clientRecv(m) {
   if (m.t === 'room') { NET.players = m.players; NET.snap = m.snap; NET.msg = ''; NET.busy = false; if (state === 'join') setState('room'); }
   else if (m.t === 'kick') netAbort('VOCÊ FOI REMOVIDO DA SALA');
   else if (m.t === 'full') netAbort('SALA CHEIA');
+  else if (m.t === 'busy') netAbort('PARTIDA EM ANDAMENTO');
+  else if (m.t === 'sel') { if (!NET.online) { NET.sel = m.s; if (state !== 'pick') setState('pick'); } }
   else if (m.t === 'start') startOnline(m);
   else if (m.t === 's') applySnap(m);
 }
@@ -2791,12 +2813,11 @@ function toggleReady() {
 }
 function startRoom() {
   if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready && (NET.snap.team <= 0 || p.team >= 0))) return;
-  const map = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map;
-  const m = { t: 'start', snap: NET.snap, map, world: { w: WW, h: WH }, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char), teams: NET.players.map(p => p.team) };
-  netAll(m); startOnline(m);
+  selStart();   // mapa e personagem agora são escolhidos por todos, depois que a sala começa
 }
 function startOnline(m) {   // todos entram na mesma partida: o anfitrião simula, os convidados recebem o jogo pela rede
   Object.assign(cfg, m.snap); cfg.map = m.map; soloSetup = false; training = false;
+  { const mi0 = m.ids.indexOf(NET.me); if (mi0 >= 0 && m.chars[mi0] >= 0) cfg.char = m.chars[mi0]; }   // personagem que você escolheu na seleção
   NET.online = true; NET.mid = 0; NET.ci = Math.max(0, m.ids.indexOf(NET.me));
   const ht = m.teams ? m.teams[m.ids.indexOf('host')] : 0;   // o time do anfitrião vira o time 0 da simulação
   NET.guests = m.ids.map((id, i) => ({ id, char: m.chars[i], ci: i, st: m.teams && cfg.team > 0 ? (m.teams[i] === ht ? 0 : 1) : null })).filter(g => g.id !== 'host');
@@ -2807,6 +2828,153 @@ function startOnline(m) {   // todos entram na mesma partida: o anfitrião simul
   matchTrack = cfg.music ? cfg.music - 1 : pickTrack();
   player = makeFighter({ isPlayer: true, pal: CHARS[cfg.char], x: WW / 2, y: WH / 2 }); player.tx = player.x; player.ty = player.y; player.ta = 0; bots = []; NET.all = [player]; NET.rd = -1;
   touch.ang = 0; updateCam(); setState('play');
+}
+/* ---- SELEÇÃO ANTES DA PARTIDA: votação de mapa e escolha de personagem (o anfitrião decide; todos clicam) ---- */
+const SEL_MAP_T = 12, SEL_CHAR_T = 25, ROLL_T = 2.6, SLOTS = [0, 1, 2, 3, -1, 4, 5, 6, 7], PCOL = ['#8fd6a4', '#ff7a6b', '#7ac7ff', '#ffd23f', '#d79bff', '#ffa24d', '#5de0d0', '#f48fb1'];
+const pname = id => id === 'host' ? 'ANFITRIÃO' : 'JOGADOR ' + (Math.max(1, NET.players.findIndex(q => q.id === id)) + 1);
+const pcol = id => { const p = NET.players.find(q => q.id === id); if (NET.snap && NET.snap.team > 0 && p && p.team >= 0) return p.team ? '#ff7a6b' : '#8fd6a4'; return PCOL[Math.max(0, NET.players.findIndex(q => q.id === id)) % PCOL.length]; };
+const pickAvail = s => { const t = Object.values(s.conf); return CHARS.map((_, i) => i).filter(i => !t.includes(i)); };
+const selPack = () => { const s = NET.sel; return { ph: s.ph, t: +s.t.toFixed(2), dur: s.dur, votes: s.votes, marks: s.marks, conf: s.conf, ids: s.ids, map: s.map, mr: s.mr, roll: s.roll ? { who: s.roll.who, cur: s.roll.cur, done: s.roll.done } : 0 }; };
+const selSync = () => { if (NET.sel && NET.host) netAll({ t: 'sel', s: selPack() }); };
+function selStart() {   // anfitrião: abre a votação de mapa para todos da sala
+  NET.sel = { ph: 'map', t: 0, dur: SEL_MAP_T, votes: {}, marks: {}, conf: {}, ids: NET.players.map(p => p.id), map: -1, mr: false, roll: 0, acc: 0 };
+  setState('pick'); selSync();
+}
+function selVote(id, v) { const s = NET.sel; if (!s || s.ph !== 'map' || !s.ids.includes(id)) return; v |= 0; if (v < 0 || v > MAPS.length) return; s.votes[id] = v; selSync(); }
+function selPick(id, c) {   // 1º clique marca, 2º clique no mesmo confirma; personagem confirmado fica bloqueado para os outros
+  const s = NET.sel; if (!s || s.ph !== 'char' || !s.ids.includes(id) || s.conf[id] !== undefined) return;
+  c |= 0; if (c < -1 || c >= CHARS.length) return;
+  if (c >= 0 && Object.values(s.conf).includes(c)) return;
+  if (s.marks[id] === c) { s.conf[id] = c; delete s.marks[id]; if (c >= 0) for (const k in s.marks) if (s.marks[k] === c) delete s.marks[k]; }
+  else s.marks[id] = c;
+  selSync();
+}
+function selDrop(id) {   // quem sai no meio da seleção deixa de contar
+  const s = NET.sel; if (!s) return;
+  s.ids = s.ids.filter(x => x !== id); delete s.votes[id]; delete s.marks[id]; delete s.conf[id];
+  if (s.ph === 'roll' && s.roll && s.roll.who === id) rollNext();
+  selSync();
+}
+function selMapDone() {   // maioria decide; sem votos ou ALEATÓRIO na frente = sorteio; empate sorteia entre os empatados
+  const s = NET.sel, c = new Array(MAPS.length + 1).fill(0); for (const id of s.ids) if (s.votes[id] !== undefined) c[s.votes[id]]++;
+  const mx = Math.max(...c), top = mx ? c.map((n, i) => n === mx ? i : -1).filter(i => i >= 0) : [MAPS.length], w = top[Math.floor(Math.random() * top.length)];
+  s.mr = w >= MAPS.length; s.map = s.mr ? Math.floor(Math.random() * MAPS.length) : w;
+  s.ph = 'mapres'; s.t = 0; s.dur = 2.4; selSync();
+}
+function selCharDone() {   // acabou o tempo (ou todos confirmaram): o marcado vale; sem marca livre vira aleatório
+  const s = NET.sel;
+  for (const id of s.ids) if (s.conf[id] === undefined) { const m = s.marks[id]; s.conf[id] = m >= 0 && !Object.values(s.conf).includes(m) ? m : -1; }
+  s.marks = {}; rollNext();
+}
+function rollNext() {   // sorteia, um de cada vez, quem pediu ALEATÓRIO
+  const s = NET.sel, who = s.ids.find(id => s.conf[id] === -1);
+  if (!who) { s.ph = 'final'; s.t = 0; s.dur = 1.6; s.roll = 0; selSync(); return; }
+  const av = pickAvail(s); if (!av.length) { s.conf[who] = 0; rollNext(); return; }
+  const target = av[Math.floor(Math.random() * av.length)];
+  s.ph = 'roll'; s.t = 0; s.dur = ROLL_T + .8; s.roll = { who, av, target, L: av.length * 2 + av.indexOf(target) + 1, cur: av[0], done: false }; selSync();
+}
+function selFinish() {
+  const s = NET.sel, ids = NET.players.map(p => p.id).filter(id => s.ids.includes(id)), used = Object.values(s.conf);
+  for (const id of ids) if (!(s.conf[id] >= 0)) { const av = CHARS.map((_, i) => i).filter(i => !used.includes(i)), c = av.length ? av[Math.floor(Math.random() * av.length)] : 0; s.conf[id] = c; used.push(c); }
+  const m = { t: 'start', snap: NET.snap, map: s.map, world: { w: WW, h: WH }, ids, chars: ids.map(id => s.conf[id]), teams: ids.map(id => NET.players.find(p => p.id === id).team) };
+  NET.sel = null; netAll(m); startOnline(m);
+}
+function selStep(dt) {
+  const s = NET.sel; if (!s) return;
+  s.t += dt; s.acc += dt;
+  if (s.ph === 'map') { if (s.t >= s.dur || (s.ids.length && s.ids.every(id => s.votes[id] !== undefined))) selMapDone(); }
+  else if (s.ph === 'mapres') { if (s.t >= s.dur) { s.ph = 'char'; s.t = 0; s.dur = SEL_CHAR_T; selSync(); } }
+  else if (s.ph === 'char') { if (s.t >= s.dur || (s.ids.length && s.ids.every(id => s.conf[id] !== undefined))) selCharDone(); }
+  else if (s.ph === 'roll') {
+    const r = s.roll;
+    if (!r) rollNext();
+    else { const p = Math.min(1, s.t / ROLL_T), e = 1 - Math.pow(1 - p, 3), i = Math.min(r.L - 1, Math.floor(e * r.L)); r.cur = r.av[i % r.av.length]; r.done = p >= 1; if (s.t >= ROLL_T + .8) { s.conf[r.who] = r.target; rollNext(); } }
+  }
+  else if (s.ph === 'final') { if (s.t >= s.dur) { selFinish(); return; } }
+  if (NET.sel === s && s.acc >= .066) { s.acc = 0; selSync(); }
+}
+const mapClick = v => { if (NET.host) selVote('host', v); else netSend(NET.conns.host, { t: 'vote', v }); };
+const charClick = c => { if (NET.host) selPick('host', c); else netSend(NET.conns.host, { t: 'pick', c }); };
+function drawPick(t) {
+  const s = NET.sel, ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
+  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  if (!s) return;
+  ctx.save(); ctx.scale(ms, ms);
+  const k = ctx.getTransform().a / (devicePixelRatio || 1), me = NET.me || 'host', mapPh = s.ph === 'map' || s.ph === 'mapres', timed = s.ph === 'map' || s.ph === 'char';
+  const over = (x, y, w, h) => input.mx > x * k && input.mx < (x + w) * k && input.my > y * k && input.my < (y + h) * k;
+  if (s.roll && s.roll.cur !== NET.lastCur) { NET.lastCur = s.roll.cur; sfxBeep(480 + s.roll.cur * 45, .05); } else if (!s.roll) NET.lastCur = -2;
+  const ts = clamp(Math.min(IW / 16, IH / 16), 18, 30);
+  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
+  txt(mapPh ? 'ESCOLHER MAPA' : 'ESCOLHER PERSONAGEM', cx + ts * .1, 30, ts, INK, 'center');
+  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  const frac = timed ? clamp(1 - s.t / s.dur, 0, 1) : 0, low = timed && s.dur - s.t < 5;
+  ctx.beginPath(); ctx.roundRect(cx - 110, 58, 220, 6, 3); ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
+  if (frac > 0) { ctx.beginPath(); ctx.roundRect(cx - 110, 58, Math.max(6, 220 * frac), 6, 3); ctx.fillStyle = low ? '#ff7a6b' : INK; ctx.fill(); }
+  if (timed) txt(String(Math.max(0, Math.ceil(s.dur - s.t))), cx + 128, 62, 16, low ? '#ff7a6b' : INK, 'left');
+  let hint;
+  if (s.ph === 'map') hint = s.votes[me] === undefined ? 'VOTE EM UM MAPA · A MAIORIA DECIDE · SEM VOTOS OU ALEATÓRIO NA FRENTE = MAPA SORTEADO' : 'VOTO ENVIADO · VOCÊ PODE TROCAR ATÉ TODOS VOTAREM OU O TEMPO ACABAR';
+  else if (s.ph === 'mapres') hint = (s.mr ? 'MAPA SORTEADO: ' : 'MAPA ESCOLHIDO: ') + MAPS[s.map].name;
+  else if (s.ph === 'char') hint = s.conf[me] === undefined ? 'CLIQUE UMA VEZ PARA MARCAR E DUAS PARA CONFIRMAR · MAPA: ' + MAPS[s.map].name : 'PERSONAGEM CONFIRMADO · AGUARDANDO OS OUTROS...';
+  else if (s.ph === 'roll') hint = 'SORTEANDO PERSONAGEM...';
+  else hint = 'PREPARANDO A PARTIDA...';
+  wrapLines(hint, Math.min(IW - 40, 760), 12).forEach((l, i) => txt(l, cx, 86 + i * 16, 12, MUTE, 'center'));
+  if (mapPh) {
+    const n = MAPS.length + 1, gap = 16, cw = Math.min(230, (IW - 40 - gap * (n - 1)) / n), ch = Math.min(cw * 1.3, IH - 250), x0 = cx - (n * cw + (n - 1) * gap) / 2, y = Math.max(124, 124 + (IH - 210 - ch) / 2);
+    for (let i = 0; i < n; i++) {
+      const mp = MAPS[i], x = x0 + i * (cw + gap), res = s.ph === 'mapres', win = res && (s.mr ? i === MAPS.length : i === s.map), mine = s.votes[me] === i, hov = s.ph === 'map' && over(x, y, cw, ch), vs = s.ids.filter(id => s.votes[id] === i);
+      ctx.globalAlpha = res && !win ? .35 : 1;
+      ctx.beginPath(); ctx.roundRect(x + .5, y + .5, cw - 1, ch - 1, 16); ctx.fillStyle = mine || win ? 'rgba(255,255,255,.09)' : hov ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.03)'; ctx.fill();
+      ctx.strokeStyle = win ? (mp ? mp.accent : INK) : mine ? INK : hov ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = win || mine ? 2.5 : 1; ctx.stroke();
+      const pw = cw - 20, ph = pw * .62; drawMapPreview(mp, x + 10, y + 10, pw, ph);
+      if (!mp) txt('?', x + cw / 2, y + 10 + ph / 2 + 2, ph * .7, INK, 'center');
+      txt(mp ? mp.name : 'ALEATÓRIO', x + cw / 2, y + ph + 34, clamp(cw / 11, 12, 18), mine || win ? INK : MUTE, 'center');
+      txt(mp ? mp.sub : 'SORTEIA UM MAPA', x + cw / 2, y + ph + 56, clamp(cw / 20, 8, 10), '#5c5c68', 'center');
+      const vr = 8, vw = Math.min(vs.length, 8) * (vr * 2 + 4) - 4, vy = y + ch - 20;
+      vs.slice(0, 8).forEach((id, j) => { ctx.beginPath(); ctx.arc(x + cw / 2 - vw / 2 + vr + j * (vr * 2 + 4), vy, vr, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); if (id === me) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); } });
+      ctx.globalAlpha = 1;
+      if (s.ph === 'map') ui.push({ x: x * k, y: y * k, w: cw * k, h: ch * k, fn: () => { sfxBeep(520, .06); mapClick(i); } });
+    }
+  } else {
+    const n9 = SLOTS.length, gap = 8, T = clamp(Math.min(86, (IW - 40 - gap * (n9 - 1)) / n9), 44, 86), gx0 = cx - (n9 * T + (n9 - 1) * gap) / 2, gy = IH - 84 - T;
+    const canMe = s.ph === 'char' && s.conf[me] === undefined, takenBy = c => c >= 0 ? s.ids.find(id => s.conf[id] === c) : undefined;
+    let hovC = -2; if (canMe) SLOTS.forEach((c, q) => { if (c >= 0 && takenBy(c) === undefined && over(gx0 + q * (T + gap), gy, T, T)) hovC = c; });
+    const myP = NET.players.find(p => p.id === me), teamRoom = NET.snap && NET.snap.team > 0 && myP && myP.team >= 0;
+    const rank = id => id === me ? 0 : teamRoom && (NET.players.find(p => p.id === id) || {}).team === myP.team ? 1 : 2, ord = [...s.ids].sort((a, b) => rank(a) - rank(b)), nn = Math.max(1, ord.length);
+    const top = 124, bot = gy - 16, sc = clamp(Math.min(IW / nn * .78 / 215, (bot - top - 54) / 275), .3, 1.3), base = bot - 54, sw = IW / nn;
+    ord.forEach((id, j) => {   // personagens de cada jogador em cima (você à esquerda)
+      const sx = sw * (j + .5), cf = s.conf[id], mk = s.marks[id], rolling = !!s.roll && s.roll.who === id;
+      const c = rolling ? s.roll.cur : cf !== undefined ? cf : id === me && hovC >= 0 ? hovC : mk !== undefined ? mk : -2, P = c >= 0 ? CHARS[c] : null, col = pcol(id);
+      const status = rolling ? 'SORTEANDO...' : cf >= 0 ? 'ESCOLHIDO' : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : id === me && hovC >= 0 ? 'PRÉVIA' : mk >= 0 ? 'MARCADO' : 'ESCOLHENDO...';
+      ctx.save(); ctx.beginPath(); ctx.rect(sx - sw / 2, top - 10, sw, bot - top + 10); ctx.clip();
+      if (P) {
+        const g = ctx.createRadialGradient(sx, base - 150 * sc, 10, sx, base - 150 * sc, 230 * sc); g.addColorStop(0, P.accent + '3a'); g.addColorStop(1, P.accent + '00'); ctx.fillStyle = g; ctx.fillRect(sx - sw / 2, top - 10, sw, bot - top + 10);
+        ctx.save(); ctx.translate(sx, base + Math.sin(t * 1.6 + j) * 1.5); ctx.scale(sc, sc); drawBust(P); ctx.restore();
+        const fd = ctx.createLinearGradient(0, base - 50 * sc, 0, base); fd.addColorStop(0, 'rgba(13,13,17,0)'); fd.addColorStop(1, '#0d0d11'); ctx.fillStyle = fd; ctx.fillRect(sx - sw / 2, base - 50 * sc, sw, 50 * sc + 1);
+      } else txt('?', sx, base - 130 * sc, 110 * sc, 'rgba(255,255,255,.1)', 'center');
+      txt(P ? P.name : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : '???', sx, base + 18, clamp(20 * sc + 4, 13, 24), P ? P.accent : MUTE, 'center');
+      txt(pname(id) + (id === me ? ' (VOCÊ)' : ''), sx, base + 36, 11, col, 'center');
+      txt(status, sx, base + 50, 10, 'rgba(231,228,211,.55)', 'center');
+      ctx.restore();
+    });
+    SLOTS.forEach((c, q) => {   // grade de escolha: um clique marca, dois confirmam
+      const x = gx0 + q * (T + gap), owner = takenBy(c), isMine = canMe && s.marks[me] === c, canPick = canMe && owner === undefined, hov = canPick && over(x, gy, T, T), rc = !!s.roll && c >= 0 && s.roll.cur === c;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(x, gy, T, T, 10); ctx.clip();
+      ctx.fillStyle = rc ? '#2a2a34' : '#16161d'; ctx.fillRect(x, gy, T, T);
+      if (c >= 0) { const sf = (T - 16) / 136; ctx.save(); ctx.beginPath(); ctx.rect(x, gy, T, T - 16); ctx.clip(); ctx.translate(x + T / 2, gy + (T - 16) / 2 + 192 * sf); ctx.scale(sf, sf); drawBust(CHARS[c]); ctx.restore(); }
+      else txt('?', x + T / 2, gy + (T - 16) / 2 + 2, T * .5, hov || isMine ? INK : MUTE, 'center');
+      if (owner !== undefined) { ctx.fillStyle = 'rgba(0,0,0,.62)'; ctx.fillRect(x, gy, T, T - 16); }
+      ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, gy + T - 16, T, 16);
+      txt(isMine ? 'CONFIRMAR' : c >= 0 ? CHARS[c].name : 'ALEATÓRIO', x + T / 2, gy + T - 8, clamp(T / 9, 7, 10), isMine ? INK : 'rgba(231,228,211,.85)', 'center');
+      ctx.restore();
+      ctx.beginPath(); ctx.roundRect(x + .5, gy + .5, T - 1, T - 1, 10);
+      ctx.strokeStyle = rc ? pcol(s.roll.who) : owner !== undefined ? pcol(owner) : isMine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = rc || isMine || owner !== undefined ? 3 : hov ? 2 : 1; ctx.stroke();
+      if (owner !== undefined) txt(owner === me ? 'VOCÊ' : owner === 'host' ? 'ANF.' : pname(owner).replace('JOGADOR ', 'J'), x + T / 2, gy + (T - 16) / 2, clamp(T / 7, 9, 13), pcol(owner), 'center');
+      let dj = 0; if (s.ph === 'char') for (const id of s.ids) if (id !== me && s.conf[id] === undefined && s.marks[id] === c) { ctx.beginPath(); ctx.arc(x + T - 10 - dj * 11, gy + 10, 4.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); dj++; }
+      if (canPick) ui.push({ x: x * k, y: gy * k, w: T * k, h: T * k, fn: () => { sfxBeep(isMine ? 880 : 620, .06); charClick(c); } });
+    });
+  }
+  cornerBtn('SAIR', -1, IW, IH, () => setState('menu'));
+  ctx.restore();
 }
 function addDigit(d) { if (!NET.busy && JOIN.length < 4) { JOIN += d; NET.err = ''; } }
 function doJoin() { if (JOIN.length === 4 && !NET.busy) joinRoom(JOIN); }
@@ -2965,13 +3133,12 @@ function drawRoom(t) {
         if (canKick) { button('EXPULSAR', rx - 72, ry + 5, 72, rh - 10, () => kickPlayer(q.id)); rx -= 78; }
         if (canSwap && NET.pick === q.id) button('TROCAR LADO', rx - 104, ry + 5, 104, rh - 10, () => requestSwap(q.id), 'primary');
         else txt(q.ready ? 'PRONTO' : 'AGUARDANDO', rx, ry + rh / 2 + 1, 11, q.ready ? col : MUTE, 'right');
-        txt(CHARS[q.char].name + (isMe ? ' (VOCÊ)' : ''), x0 + 14, ry + rh / 2 + (q.id === 'host' ? -4 : 1), 13, INK, 'left');
-        if (q.id === 'host') txt('ANFITRIÃO', x0 + 14, ry + rh / 2 + 9, 9, MUTE, 'left');
+        txt(pname(q.id) + (isMe ? ' (VOCÊ)' : ''), x0 + 14, ry + rh / 2 + 1, 13, INK, 'left');
         if (canSwap) ui.push({ x: (x0) * k, y: ry * k, w: cw * k, h: rh * k, fn: () => { NET.pick = NET.pick === q.id ? null : q.id; } });   // clique na pessoa do outro time: mostra TROCAR LADO
       }
     }
     y += 28 + n2 * (rh + rg);
-    const un = NET.players.filter(q => !(q.team >= 0)).map(q => CHARS[q.char].name + (q.id === NET.me ? ' (VOCÊ)' : ''));
+    const un = NET.players.filter(q => !(q.team >= 0)).map(q => pname(q.id) + (q.id === NET.me ? ' (VOCÊ)' : ''));
     if (un.length) txt('SEM TIME: ' + un.join('  ·  '), cx, y + 8, 12, MUTE, 'center');
     y += 28;
   }
@@ -2980,7 +3147,7 @@ function drawRoom(t) {
     ctx.beginPath(); ctx.roundRect(px + .5, ry + .5, pw - 1, rh - 1, 10); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = p && p.ready ? 'rgba(143,214,164,.6)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
     if (!p) { txt('AGUARDANDO JOGADOR...', px + 14, ry + rh / 2 + 1, 12, '#4a4a56', 'left'); continue; }
     const canKick = NET.host && p.id !== 'host';
-    txt(CHARS[p.char].name + (p.id === 'host' ? '  · ANFITRIÃO' : '') + (p.id === NET.me ? '  (VOCÊ)' : ''), px + 14, ry + rh / 2 + 1, 14, INK, 'left');
+    txt(pname(p.id) + (p.id === NET.me ? '  (VOCÊ)' : ''), px + 14, ry + rh / 2 + 1, 14, INK, 'left');
     txt(p.ready ? 'PRONTO' : 'AGUARDANDO', px + pw - (canKick ? 98 : 14), ry + rh / 2 + 1, 12, p.ready ? GREEN : MUTE, 'right');
     if (canKick) button('EXPULSAR', px + pw - 90, ry + 5, 82, rh - 10, () => kickPlayer(p.id));
   }
@@ -3015,6 +3182,7 @@ function loop(now) {
   else if (state === 'modes') { menuT += dt; drawModes(menuT); }
   else if (state === 'maps') { menuT += dt; drawMaps(menuT); }
   else if (state === 'setup') { menuT += dt; drawSetup(menuT); }
+  else if (state === 'pick') { menuT += dt; if (NET.host) selStep(rdt); else if (NET.sel) NET.sel.t = Math.min(NET.sel.dur, NET.sel.t + rdt); drawPick(menuT); }
   else if (state === 'room') { menuT += dt; drawRoom(menuT); }
   else if (state === 'join') { menuT += dt; drawJoin(menuT); }
   else if (state === 'options') { menuT += dt; drawOptions(menuT); }
