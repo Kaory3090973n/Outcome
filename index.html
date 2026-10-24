@@ -1238,17 +1238,32 @@ function drawPads(P) {
 }
 
 /* Braço de 2 segmentos (o comprimento se adapta, então nunca "desconecta") */
-function drawArm(f, sx, sy, F, side, k = .52) {   // k: quanto o braço se dobra (.52 normal, .505 quase reto)
+function drawArm(f, sx, sy, F, side, k = .52, hold = false) {   // k: quanto o braço se dobra (.52 normal, .505 quase reto)
   const dx = F.x - sx, dy = F.y - sy, d = Math.max(Math.hypot(dx, dy), .001);
   const L = Math.max(10, d * k), h = Math.sqrt(Math.max(L * L - d * d / 4, 0));
   const ex = sx + dx / 2 + (-dy / d) * side * h, ey = sy + dy / 2 + (dx / d) * side * h;
   const seg = (ax, ay, bx, by, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); };
-  seg(sx, sy, ex, ey, 9.5, (f.pal.bare ? f.pal.skinD : f.pal.jDark)); seg(ex, ey, F.x, F.y, 8, f.pal.skinD);
-  seg(sx, sy, ex, ey, 7.5, (f.pal.bare ? f.pal.skin : f.pal.jacket)); seg(ex, ey, F.x, F.y, 6, f.pal.skin);
-  const r = 5.4 + Math.max(F.ext || 0, 0) * 1.4;
-  ctx.beginPath(); ctx.arc(F.x, F.y, r, 0, TAU); ctx.fillStyle = f.pal.skin; ctx.fill();
-  ctx.lineWidth = 2.2; ctx.strokeStyle = '#f4f1ea'; ctx.stroke();
-  ctx.beginPath(); ctx.arc(F.x, F.y, r + 1.6, 0, TAU); ctx.lineWidth = 1.2; ctx.strokeStyle = '#000a'; ctx.stroke();
+  seg(sx, sy, ex, ey, 9.5, (f.pal.bare ? f.pal.skinD : f.pal.jDark));
+  const hp = handPath(F, Math.atan2(F.y - ey, F.x - ex), Math.max(F.ext || 0, 0), side, hold);
+  // contorno só em volta do antebraço + mão juntos: primeiro tudo em tom escuro, depois o preenchimento por cima apaga a borda da emenda
+  seg(ex, ey, F.x, F.y, 8, f.pal.skinD); ctx.strokeStyle = f.pal.skinD; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.stroke(hp);
+  seg(sx, sy, ex, ey, 7.5, (f.pal.bare ? f.pal.skin : f.pal.jacket));
+  seg(ex, ey, F.x, F.y, 6, f.pal.skin); ctx.fillStyle = f.pal.skin; ctx.fill(hp);
+}
+function handPath(F, a, ext, side, hold) {   // punho fechado visto de cima (como numa mão segurando um cabo): fino no pulso, mais largo nos dedos; o cano sai pela frente
+  const k = 1 + ext * .22, c = Math.cos(a), s = Math.sin(a), P = new Path2D();
+  const pt = (x, y) => [F.x + (x * c - y * s) * k, F.y + (x * s + y * c) * k];
+  const pt2 = (x, y) => pt(x, y * side);   // espelha para a mão esquerda/direita (o polegar fica do lado do corpo)
+  if (!hold) {   // mão livre (soco/solta): punho fechado de lado, com o polegar sobre os dedos e a fileira de nós dos dedos na frente
+    P.moveTo(...pt2(-9, -2.8));
+    const c = (x1, y1, x2, y2, x3, y3) => P.bezierCurveTo(...pt2(x1, y1), ...pt2(x2, y2), ...pt2(x3, y3));
+    c(-5, -3.2, -2.5, -5.4, 1, -6); c(3.6, -6.5, 6, -5.8, 6.8, -3.4); c(7.4, -1.2, 7.4, 1.6, 6.8, 3.4); c(6.2, 5.4, 4.4, 6, 2, 5.8); c(-2, 5.4, -5, 3.4, -9, 2.8);
+    return P;
+  }
+  P.moveTo(...pt(-9, -3));
+  const b = (x1, y1, x2, y2, x3, y3) => P.bezierCurveTo(...pt(x1, y1), ...pt(x2, y2), ...pt(x3, y3));
+  b(-5, -3.2, -3, -4.9, 1.5, -4.9); b(3.8, -4.9, 5, -3.7, 5, -2); b(5, -.8, 5, .8, 5, 2); b(5, 3.7, 3.8, 4.9, 1.5, 4.9); b(-3, 4.9, -5, 3.2, -9, 3);
+  return P;
 }
 
 /* Personagem caído (nocaute) + estrelinhas girando */
@@ -1344,10 +1359,10 @@ function drawFighter(f) {
     }
     ctx.save(); ctx.translate(ox, bob); ctx.rotate(rot); drawWeapon(w); ctx.restore();
     const [lx, ly] = shoulder(-1), [rx, ry] = shoulder(1);
-    if (w.melee) { drawArm(f, lx, ly, gp(w.gripL), -1); drawArm(f, rx, ry, gp(w.gripR), 1); }
+    if (w.melee) { drawArm(f, lx, ly, gp(w.gripL), -1, .52, true); drawArm(f, rx, ry, gp(w.gripR), 1, .52, true); }
     else {
       drawArm(f, lx, ly, fistLocal(f, 'left'), -1);       // mão esquerda solta ao lado do corpo
-      drawArm(f, rx, ry, gp(w.gripR), 1, .5);           // braço direito esticado, segurando e apontando a arma
+      drawArm(f, rx, ry, gp(w.gripR), 1, .5, true);           // braço direito esticado, segurando e apontando a arma
     }
     if (f.flash > 0 && !w.melee) {  // Clarão do disparo (menor com silenciador)
       ctx.save(); ctx.translate(ox + w.muzzle, 0); ctx.rotate(rnd(-.3, .3)); const k = w.supp ? .45 : 1; ctx.scale(k, k);
@@ -1481,7 +1496,6 @@ function drawHUD(t) {
     txt(`[${keyName(KEYS.interact)}] PEGAR ${w.model}`, px, py - 56, 13, w.accent, 'center', 8);
     if (!w.melee) txt(`${player.near.mag} / ${player.near.reserve}`, px, py - 41, 11, '#fff', 'center');
   }
-  if (!TOUCH) txt(`${moveHint()} mover | Clique: socar (sem arma) | Segure: atirar | ${keyName(KEYS.interact)} pegar | ${keyName(KEYS.cover)} cobertura | ${keyName(KEYS.throw)} arremessar | ${keyName(KEYS.reload)} recarregar | Esc pausa`, 18, H - 18, 12, 'rgba(255,255,255,.35)', 'left');
 
   if (!player.dead && player.cover) {
     txt('EM COBERTURA', W / 2, H - 120, 18, '#8fd6a4', 'center');
@@ -1529,18 +1543,17 @@ function drawMenu(t) {
   // o título cresce até a tinta das letras ocupar exatamente a largura do botão JOGAR (canto a canto)
   ctx.font = 'bold 100px "Courier New", monospace'; ctx.textAlign = 'left'; try { ctx.letterSpacing = '0px'; } catch (e) {}
   const mm = ctx.measureText('OUTCOME'), aL = mm.actualBoundingBoxLeft || 0, ink = mm.actualBoundingBoxRight !== undefined ? aL + mm.actualBoundingBoxRight : mm.width, ts = BW / (ink / 100 + 6 * .22);
-  const y0 = Math.max(20, (IH - (ts + 284)) / 2);
+  const y0 = Math.max(20, (IH - (ts + 224)) / 2);
   try { ctx.letterSpacing = (ts * .22) + 'px'; } catch (e) {}
   txt('OUTCOME', bx + aL * ts / 100, y0 + ts / 2, ts, INK, 'left');
   try { ctx.letterSpacing = '0px'; } catch (e) {}
   let y = y0 + ts + 48;
   // botões largos (JOGAR, TREINAMENTO) e pares lado a lado, todos alinhados
   button('JOGAR', bx, y, BW, 56, () => setState('modes'), 'primary');
-  button('TREINAMENTO', bx, y + 68, BW, 48, () => setState('train'));
-  button('ARMAS', bx, y + 128, HW, 48, () => { infoIdx = 0; setState('info'); });
-  button('PERSONAGENS', bx + HW + 8, y + 128, HW, 48, () => { chIdx = cfg.char; setState('chars'); });
-  button('ATUALIZAÇÃO', bx, y + 188, HW, 48, () => { logScroll = 0; setState('log'); });
-  button('OPÇÕES', bx + HW + 8, y + 188, HW, 48, () => { optBack = 'menu'; setState('options'); });
+  button('ARMAS', bx, y + 68, HW, 48, () => { infoIdx = 0; setState('info'); });
+  button('PERSONAGENS', bx + HW + 8, y + 68, HW, 48, () => { chIdx = cfg.char; setState('chars'); });
+  button('ATUALIZAÇÃO', bx, y + 128, HW, 48, () => { logScroll = 0; setState('log'); });
+  button('OPÇÕES', bx + HW + 8, y + 128, HW, 48, () => { optBack = 'menu'; setState('options'); });
   txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right');   // contador de versão (só no lobby)
   ctx.restore();
 }
@@ -1957,14 +1970,10 @@ function drawPause() {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2;
   ctx.fillStyle = 'rgba(6,6,10,.74)'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.save(); ctx.scale(ms, ms);
-  const y0 = IH / 2 - 128;
-  try { ctx.letterSpacing = '6px'; } catch (e) {}
-  txt('PAUSADO', cx + 3, y0, 34, '#e7e4d3', 'center');
-  try { ctx.letterSpacing = '0px'; } catch (e) {}
-  cornerBtn('CONTINUAR', 1, IW, IH, () => setState('play'), 'primary');
-  button('OPÇÕES', cx - 130, y0 + 40, 260, 48, () => { optBack = 'pause'; setState('options'); });
-  button('SAIR', cx - 130, y0 + 100, 260, 48, () => setState('menu'));
-  txt(TOUCH ? '' : 'Esc também continua', cx, y0 + 178, 12, '#5c5c68', 'center');
+  const y0 = IH / 2 - 96;   // só três botões, sem nenhum texto
+  button('CONTINUAR', cx - 130, y0, 260, 52, () => setState('play'), 'primary');
+  button('OPÇÕES', cx - 130, y0 + 66, 260, 48, () => { optBack = 'pause'; setState('options'); });
+  button('SAIR', cx - 130, y0 + 126, 260, 48, () => setState('menu'));
   ctx.restore();
 }
 function drawOptions(t) {
@@ -2188,6 +2197,31 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 43, v: '0.26.3', title: 'Mão livre de um jeito, mão da arma de outro',
+    modificado: [
+      'Mão livre (soco e mão esquerda solta, função handPath): agora é um punho fechado visto de lado, como na foto de referência, com o polegar do lado do corpo e a fileira dos nós dos dedos na frente.',
+      'Mão que segura a arma (direita; as duas nas armas de corpo a corpo): continua o punho da foto da chave de fenda, com a arma saindo pela frente.',
+    ] },
+  { n: 42, v: '0.26.2', title: 'Mão e braço com contorno único',
+    modificado: [
+      'Mão e antebraço (funções drawArm e handPath): agora têm um contorno só em volta do conjunto, sem borda na emenda entre a mão e o braço.',
+      'Formato da mão refeito com base na foto de referência: punho visto de cima, fino no pulso e mais largo na frente, com o cano da arma saindo pela frente do punho.',
+    ] },
+  { n: 41, v: '0.26.1', title: 'Mão fechada simples e na posição certa',
+    modificado: [
+      'Mão (função drawHand): agora é um punho único de uma cor só, sem dedos nem marcas desenhadas, centrado no cabo da arma, como uma mão que realmente segura. O cano sai pela frente do punho.',
+    ] },
+  { n: 40, v: '0.26.0', title: 'Mão realista, pausa limpa e lobby sem treinamento',
+    modificado: [
+      'Mão do personagem (função drawArm, nova drawHand): saiu a bola branca com contorno e entrou uma mão fechada vista de cima, com punho, dorso, quatro dedos dobrados com as articulações e o polegar do lado do corpo. A mão gira junto com o antebraço e também aparece segurando armas.',
+      'Menu de pausa (Esc, função drawPause): agora só tem três botões, CONTINUAR, OPÇÕES e SAIR. O CONTINUAR saiu do canto da tela e foi para a lista.',
+      'Lobby (função do menu): os botões ficaram JOGAR, ARMAS, PERSONAGENS, ATUALIZAÇÃO e OPÇÕES, já reencaixados na tela.',
+    ],
+    removido: [
+      'Botão TREINAMENTO do lobby.',
+      'Título PAUSADO e o texto "Esc também continua" do menu de pausa.',
+      'A linha de comandos (mover, socar, atirar, pegar, cobertura, arremessar, recarregar, pausa) que ficava embaixo da tela durante a partida.',
+    ] },
   { n: 39, v: '0.25.2', title: 'Sem sombra escura ao redor do personagem',
     removido: [
       'A névoa escura e a vinheta (bordas escurecidas) que cercavam o personagem durante a partida (função de desenho da partida, camada final da tela).',
