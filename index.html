@@ -1981,12 +1981,13 @@ function drawOptions(t) {
   const W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, wide = W > 860, MUTE = '#8a8a96', INK = '#e7e4d3';
   ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.save(); ctx.scale(ms, ms);
-  txt('OPÇÕES', cx, 34, clamp(W / 32, 20, 30), INK, 'center');
-  txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar  ·  se repetir, as duas ações trocam de lugar', cx, 62, 12, bindCapture ? '#ffd23f' : '#5c5c68', 'center');
+  const OY = wide ? Math.max(0, Math.round((H - 568) / 2 - 20)) : 0;   // centraliza o conteúdo na altura da tela (PC)
+  txt('OPÇÕES', cx, 34 + OY, clamp(W / 32, 20, 30), INK, 'center');
+  txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar  ·  se repetir, as duas ações trocam de lugar', cx, 62 + OY, 12, bindCapture ? '#ffd23f' : '#5c5c68', 'center');
   const fixed = [['ATIRAR / SOCAR', 'CLIQUE ESQ.'], ['ARREMESSAR / ESPIAR', 'CLIQUE DIR.'], ['MIRAR', 'MOUSE'], ['PAUSAR / VOLTAR', 'ESC']];
   const CW = 390, rowH = wide ? 46 : 33, KW = 140, kh = rowH - 6;
   const x1 = wide ? cx - CW - 20 : cx - CW / 2, x2 = wide ? cx + 20 : x1;
-  let y1 = 96;
+  let y1 = 96 + OY;
   txt('TECLADO', x1, y1, 12, MUTE, 'left'); y1 += 18;
   KEYDEFS.forEach(([id, label]) => {
     txt(label, x1, y1 + kh / 2, 13, INK, 'left');
@@ -1994,7 +1995,7 @@ function drawOptions(t) {
     button(on ? 'PRESSIONE...' : keyName(KEYS[id]), x1 + CW - KW, y1, KW, kh, () => { bindCapture = id; }, on ? 'primary' : undefined);
     y1 += rowH;
   });
-  let y2 = wide ? 96 : y1 + 10;
+  let y2 = wide ? 96 + OY : y1 + 10;
   txt('MOUSE E SISTEMA (FIXOS)', x2, y2, 12, MUTE, 'left'); y2 += 18;
   fixed.forEach(([label, val]) => {
     txt(label, x2, y2 + kh / 2, 13, 'rgba(231,228,211,.6)', 'left');
@@ -2014,9 +2015,9 @@ function drawOptions(t) {
   arow('MÚSICA DA PARTIDA', cfg.music ? cfg.music + ' · ' + TRACKS[cfg.music - 1].name : 'ALEATÓRIA', () => { cfg.music = (cfg.music + 5) % 6; audioChanged(); }, () => { cfg.music = (cfg.music + 1) % 6; audioChanged(); });
   if (!wide) y1 = y2;
   txt('As setas do teclado também movem o personagem.', x2, (wide ? y2 : y1) + 8, 11, '#5c5c68', 'left');
-  const by = Math.max(wide ? 96 + 18 + 9 * rowH + 14 : y1 + 30, 0) , bb = Math.min(by, H - 62);
+  const by = Math.max(wide ? 96 + OY + 18 + 9 * rowH + 14 : y1 + 30, 0) , bb = Math.min(by, H - 62);
   button('RESTAURAR PADRÃO', cx - 115, bb, 230, 46, () => { KEYDEFS.forEach(([id,, d]) => KEYS[id] = d); try { localStorage.setItem('oc_keys', JSON.stringify(KEYS)); } catch (e) {} bindCapture = null; });
-  cornerBtn('VOLTAR', -1, W, H, () => setState(optBack), 'primary');
+  cornerBtn('VOLTAR', -1, W, H, () => setState(optBack));
   ctx.restore();
 }
 function wrapTxt(s, x, y, maxW, lh, size, color) {
@@ -2197,6 +2198,24 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 45, v: '0.27.0', title: 'Times verde e vermelho nas salas predefinidas',
+    criado: [
+      'Nas salas predefinidas (1v1 a 4v4) os jogadores ficam separados em dois times, lado a lado e afastados: TIME VERDE à esquerda e TIME VERMELHO à direita, cada um com as vagas do formato da partida.',
+      'Quem entra na sala não está em nenhum time: aparece a mensagem ENTRE EM UM TIME PARA JOGAR e a pessoa aparece na linha SEM TIME. Para entrar, é só clicar em + ENTRAR NO TIME numa vaga livre.',
+      'Trocar de lado: ao clicar numa pessoa do outro time aparece o botão TROCAR LADO e, ao clicar nele, os dois invertem de time na hora.',
+    ],
+    modificado: [
+      'Sem time não dá para ficar PRONTO (o botão some), e mudar de time tira o PRONTO. O anfitrião só consegue iniciar quando todos estão em um time e prontos.',
+      'Na partida, cada jogador entra no time que escolheu na sala, e os bots completam os dois times.',
+    ],
+    removido: [
+      'O contador (0/1 PRONTOS) que aparecia do lado do INICIAR PARTIDA, já que o PRONTO de cada um aparece na lista.',
+    ] },
+  { n: 44, v: '0.26.4', title: 'Opções centralizada e VOLTAR escuro',
+    modificado: [
+      'Tela OPÇÕES (função drawOptions): o botão VOLTAR agora tem o mesmo estilo escuro dos outros botões, em vez de branco.',
+      'Todo o conteúdo da tela OPÇÕES (título, teclas, mouse, áudio e RESTAURAR PADRÃO) foi para o meio da altura da tela, em vez de ficar colado no topo.',
+    ] },
   { n: 43, v: '0.26.3', title: 'Mão livre de um jeito, mão da arma de outro',
     modificado: [
       'Mão livre (soco e mão esquerda solta, função handPath): agora é um punho fechado visto de lado, como na foto de referência, com o polegar do lado do corpo e a fileira dos nós dos dedos na frente.',
@@ -2693,7 +2712,7 @@ function drawDead() {
 const PFX = 'outcome-game-';
 function netReset() { try { if (NET.peer) NET.peer.destroy(); } catch (e) {} const hadW = !!NET.world;
   Object.assign(NET, { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', busy: false, snap: null, others: null, copied: false,
-    online: false, cl: false, ci: 0, all: [], guests: [], rin: {}, ev: [], mid: 0, acc: 0, ia: 0, rd: -1, lb: 0, aim: 0, myTeam: 0, world: null, cnt: { clk: 0, it: 0, th: 0, rl: 0, cv: 0 } });
+    online: false, cl: false, ci: 0, all: [], guests: [], rin: {}, ev: [], mid: 0, acc: 0, ia: 0, rd: -1, lb: 0, aim: 0, myTeam: 0, pick: null, world: null, cnt: { clk: 0, it: 0, th: 0, rl: 0, cv: 0 } });
   if (hadW) resize();   // volta ao tamanho de mundo da própria tela
 }
 const netSend = (c, m) => { try { if (c && c.open) c.send(m); } catch (e) {} };
@@ -2703,7 +2722,7 @@ function netAbort(err) { netReset(); NET.err = err; setState('join'); }
 function leaveRoom() { const h = NET.host; netReset(); setState(h ? 'setup' : 'modes'); }
 function createRoom() {
   netReset(); Object.assign(NET, { host: true, err: '', msg: 'CRIANDO SALA...', busy: true, me: 'host', cap: cfg.team > 0 ? cfg.team * 2 : 8,
-    snap: { team: cfg.team, mode: cfg.mode, pts: cfg.pts, time: cfg.time, loot: cfg.loot, diff: cfg.diff, bots: cfg.bots }, players: [{ id: 'host', char: cfg.char, ready: false }] });
+    snap: { team: cfg.team, mode: cfg.mode, pts: cfg.pts, time: cfg.time, loot: cfg.loot, diff: cfg.diff, bots: cfg.bots }, players: [{ id: 'host', char: cfg.char, ready: false, team: -1 }] });
   setState('room');
   if (typeof Peer === 'undefined') { NET.err = 'SEM CONEXÃO COM O SERVIDOR ONLINE'; NET.busy = false; return; }
   openRoom(0);
@@ -2720,9 +2739,11 @@ function hostRecv(c, m) {
   if (!m || typeof m !== 'object') return; const id = c.peer;
   if (m.t === 'hello') {
     if (NET.players.length >= NET.cap && !NET.players.some(p => p.id === id)) { netSend(c, { t: 'full' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); return; }
-    NET.conns[id] = c; if (!NET.players.some(p => p.id === id)) NET.players.push({ id, char: clamp(+m.char | 0, 0, CHARS.length - 1), ready: false });
+    NET.conns[id] = c; if (!NET.players.some(p => p.id === id)) NET.players.push({ id, char: clamp(+m.char | 0, 0, CHARS.length - 1), ready: false, team: -1 });
     roomSync();
-  } else if (m.t === 'ready') { const p = NET.players.find(q => q.id === id); if (p) { p.ready = !!m.v; roomSync(); } }
+  } else if (m.t === 'ready') { const p = NET.players.find(q => q.id === id); if (p && (!(NET.snap && NET.snap.team > 0) || p.team >= 0)) { p.ready = !!m.v; roomSync(); } }
+  else if (m.t === 'team') setTeamOf(id, m.v | 0);
+  else if (m.t === 'swap') swapTeams(id, String(m.with));
   else if (m.t === 'in' && NET.rin[id]) { const r = NET.rin[id], c = v => clamp(+v || 0, -2, 2); Object.assign(r, { mx: c(m.mx), my: c(m.my), aim: +m.aim || 0, down: !!m.down, pk: !!m.pk, clk: m.clk | 0, it: m.it | 0, th: m.th | 0, rl: m.rl | 0, cv: m.cv | 0 }); }
 }
 function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); if (NET.online) { NET.guests = NET.guests.filter(g => g.id !== id); for (const b of bots) if (b.cid === id) b.remote = false; } roomSync(); }   // quem sai no meio da partida vira bot
@@ -2750,20 +2771,35 @@ function clientRecv(m) {
   else if (m.t === 'start') startOnline(m);
   else if (m.t === 's') applySnap(m);
 }
+/* Salas predefinidas (1v1..4v4): cada jogador escolhe um lado (0 = verde, 1 = vermelho). Quem entra começa sem time. */
+const teamCount = t => NET.players.filter(p => p.team === t).length;
+function setTeamOf(id, t) {   // anfitrião: coloca o jogador numa vaga livre do time
+  const p = NET.players.find(q => q.id === id); if (!p || !NET.snap || NET.snap.team <= 0 || (t !== 0 && t !== 1) || p.team === t || teamCount(t) >= NET.snap.team) return;
+  p.team = t; p.ready = false; roomSync();
+}
+function swapTeams(a, b) {   // anfitrião: dois jogadores de times opostos trocam de lado
+  const pa = NET.players.find(q => q.id === a), pb = NET.players.find(q => q.id === b);
+  if (!pa || !pb || !(pa.team >= 0) || !(pb.team >= 0) || pa.team === pb.team) return;
+  const t = pa.team; pa.team = pb.team; pb.team = t; pa.ready = pb.ready = false; roomSync();
+}
+function chooseTeam(t) { NET.pick = null; if (NET.host) setTeamOf('host', t); else netSend(NET.conns.host, { t: 'team', v: t }); }
+function requestSwap(id) { NET.pick = null; if (NET.host) swapTeams('host', id); else netSend(NET.conns.host, { t: 'swap', with: id }); }
 function toggleReady() {
   const me = NET.players.find(p => p.id === NET.me); if (!me) return;
+  if (NET.snap && NET.snap.team > 0 && !(me.team >= 0)) return;   // sem time não dá para ficar pronto
   if (NET.host) { me.ready = !me.ready; roomSync(); } else netSend(NET.conns.host, { t: 'ready', v: !me.ready });
 }
 function startRoom() {
-  if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready)) return;
+  if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready && (NET.snap.team <= 0 || p.team >= 0))) return;
   const map = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map;
-  const m = { t: 'start', snap: NET.snap, map, world: { w: WW, h: WH }, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char) };
+  const m = { t: 'start', snap: NET.snap, map, world: { w: WW, h: WH }, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char), teams: NET.players.map(p => p.team) };
   netAll(m); startOnline(m);
 }
 function startOnline(m) {   // todos entram na mesma partida: o anfitrião simula, os convidados recebem o jogo pela rede
   Object.assign(cfg, m.snap); cfg.map = m.map; soloSetup = false; training = false;
   NET.online = true; NET.mid = 0; NET.ci = Math.max(0, m.ids.indexOf(NET.me));
-  NET.guests = m.ids.map((id, i) => ({ id, char: m.chars[i], ci: i })).filter(g => g.id !== 'host');
+  const ht = m.teams ? m.teams[m.ids.indexOf('host')] : 0;   // o time do anfitrião vira o time 0 da simulação
+  NET.guests = m.ids.map((id, i) => ({ id, char: m.chars[i], ci: i, st: m.teams && cfg.team > 0 ? (m.teams[i] === ht ? 0 : 1) : null })).filter(g => g.id !== 'host');
   if (NET.host) { NET.rin = {}; NET.guests.forEach(g => NET.rin[g.id] = { mx: 0, my: 0, aim: 0, down: false, pk: false, clk: 0, it: 0, th: 0, rl: 0, cv: 0 }); startMatch(); return; }
   NET.cl = true; NET.world = m.world; WW = m.world.w; WH = m.world.h; curMap = MAPS[m.map]; buildCrates();
   M = { round: 0, map: m.map, room: cfg.team, team: cfg.team > 0, sc: [0, 0], target: 0, time: 0, phase: '', phaseT: 0, left: 0, flashT: 0, last: null, beep: -1 };
@@ -2794,7 +2830,7 @@ function remoteStep(b, dt) {
 function assignRemotes() {   // a cada rodada, cada amigo assume um lutador (em times, os amigos ficam em times opostos)
   if (!(NET.host && NET.online) || training) return; const used = new Set();
   NET.guests.forEach((g, k) => {
-    const want = M && M.team ? (k + 1) % 2 : null;
+    const want = M && M.team ? (g.st !== null && g.st !== undefined ? g.st : (k + 1) % 2) : null;   // time escolhido na sala
     const b = bots.find(x => !used.has(x) && (want === null || x.team === want)) || bots.find(x => !used.has(x)); if (!b) return; used.add(b);
     Object.assign(b, { remote: true, cid: g.id, ci: g.ci, pal: CHARS[g.char], hp: 100, maxHp: 100, speed: C.moveSpeed, punchDmg: C.punchDamage, rin: NET.rin[g.id], rl: null, rbuf: 0, coverReq: false });
   });
@@ -2896,7 +2932,8 @@ function drawRoom(t) {
   ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), pw = Math.min(IW - 40, 460), px = cx - pw / 2, rh = 38, rg = 5, cap = NET.cap || 8, snap = NET.snap || {};
   const me = NET.players.find(p => p.id === NET.me), n = NET.players.length, rc = NET.players.filter(p => p.ready).length, all = n > 0 && rc === n && !NET.err;
-  let y = Math.max(10, (IH - (30 + 22 + 84 + cap * (rh + rg) + 10 + (NET.host ? 3 : 2) * 58)) / 2);
+  const teamRoom = snap.team > 0, rowsH = teamRoom ? 34 + 28 + snap.team * (rh + rg) + 28 : cap * (rh + rg);
+  let y = Math.max(10, (IH - (30 + 22 + 84 + rowsH + 10 + (NET.host ? 3 : 2) * 58)) / 2);
   try { ctx.letterSpacing = '6px'; } catch (e) {}
   txt('SALA', cx + 3, y + 15, 30, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
   txt(snap.team > 0 ? `PARTIDA ${snap.team}v${snap.team}` : 'SALA PERSONALIZADA', cx, y + 42, 12, MUTE, 'center'); y += 58;
@@ -2906,7 +2943,39 @@ function drawRoom(t) {
     txt(NET.copied ? 'CÓDIGO COPIADO!' : 'CÓDIGO DA SALA · TOQUE PARA COPIAR', cx, y + 62, 11, NET.copied ? GREEN : MUTE, 'center');
     ui.push({ x: (cx - 150) * k, y: y * k, w: 300 * k, h: 70 * k, fn: () => { try { navigator.clipboard.writeText(NET.code); NET.copied = true; } catch (e) {} } }); }
   y += 84;
-  for (let i = 0; i < cap; i++) {
+  if (teamRoom) {   // dois times lado a lado, afastados: verde à esquerda, vermelho à direita
+    const n2 = snap.team, gap = 70, cw = Math.min(300, (IW - 30 - gap) / 2), cols = [cx - gap / 2 - cw, cx + gap / 2], TC = ['#8fd6a4', '#ff7a6b'], TN = ['TIME VERDE', 'TIME VERMELHO'];
+    if (me && !(me.team >= 0) && !NET.err) txt('ENTRE EM UM TIME PARA JOGAR', cx, y + 12, 15, '#ffd23f', 'center');
+    y += 34;
+    for (let t2 = 0; t2 < 2; t2++) {
+      const x0 = cols[t2], mem = NET.players.filter(q => q.team === t2), col = TC[t2];
+      try { ctx.letterSpacing = '3px'; } catch (e) {} txt(TN[t2], x0 + 4, y + 8, 12, col, 'left'); try { ctx.letterSpacing = '0px'; } catch (e) {}
+      txt(`${mem.length}/${n2}`, x0 + cw - 4, y + 8, 12, col, 'right');
+      ctx.fillStyle = col; ctx.fillRect(x0, y + 20, cw, 2);
+      for (let i = 0; i < n2; i++) {
+        const q = mem[i], ry = y + 28 + i * (rh + rg), tint = t2 ? 'rgba(255,122,107,.07)' : 'rgba(143,214,164,.07)';
+        ctx.beginPath(); ctx.roundRect(x0 + .5, ry + .5, cw - 1, rh - 1, 10); ctx.fillStyle = tint; ctx.fill(); ctx.strokeStyle = q && q.ready ? col : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
+        if (!q) {
+          if (me && me.team !== t2 && !NET.err) button('+ ENTRAR NO TIME', x0 + 6, ry + 5, cw - 12, rh - 10, () => chooseTeam(t2));
+          else txt('VAGA', x0 + 14, ry + rh / 2 + 1, 12, '#4a4a56', 'left');
+          continue;
+        }
+        const isMe = q.id === NET.me, canKick = NET.host && q.id !== 'host', canSwap = !!me && me.team >= 0 && q.team !== me.team && !isMe && !NET.err;
+        let rx = x0 + cw - 8;
+        if (canKick) { button('EXPULSAR', rx - 72, ry + 5, 72, rh - 10, () => kickPlayer(q.id)); rx -= 78; }
+        if (canSwap && NET.pick === q.id) button('TROCAR LADO', rx - 104, ry + 5, 104, rh - 10, () => requestSwap(q.id), 'primary');
+        else txt(q.ready ? 'PRONTO' : 'AGUARDANDO', rx, ry + rh / 2 + 1, 11, q.ready ? col : MUTE, 'right');
+        txt(CHARS[q.char].name + (isMe ? ' (VOCÊ)' : ''), x0 + 14, ry + rh / 2 + (q.id === 'host' ? -4 : 1), 13, INK, 'left');
+        if (q.id === 'host') txt('ANFITRIÃO', x0 + 14, ry + rh / 2 + 9, 9, MUTE, 'left');
+        if (canSwap) ui.push({ x: (x0) * k, y: ry * k, w: cw * k, h: rh * k, fn: () => { NET.pick = NET.pick === q.id ? null : q.id; } });   // clique na pessoa do outro time: mostra TROCAR LADO
+      }
+    }
+    y += 28 + n2 * (rh + rg);
+    const un = NET.players.filter(q => !(q.team >= 0)).map(q => CHARS[q.char].name + (q.id === NET.me ? ' (VOCÊ)' : ''));
+    if (un.length) txt('SEM TIME: ' + un.join('  ·  '), cx, y + 8, 12, MUTE, 'center');
+    y += 28;
+  }
+  for (let i = 0; i < cap && !teamRoom; i++) {
     const p = NET.players[i], ry = y + i * (rh + rg);
     ctx.beginPath(); ctx.roundRect(px + .5, ry + .5, pw - 1, rh - 1, 10); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = p && p.ready ? 'rgba(143,214,164,.6)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
     if (!p) { txt('AGUARDANDO JOGADOR...', px + 14, ry + rh / 2 + 1, 12, '#4a4a56', 'left'); continue; }
@@ -2915,9 +2984,9 @@ function drawRoom(t) {
     txt(p.ready ? 'PRONTO' : 'AGUARDANDO', px + pw - (canKick ? 98 : 14), ry + rh / 2 + 1, 12, p.ready ? GREEN : MUTE, 'right');
     if (canKick) button('EXPULSAR', px + pw - 90, ry + 5, 82, rh - 10, () => kickPlayer(p.id));
   }
-  y += cap * (rh + rg) + 10; const bw = Math.min(300, pw);
-  if (NET.host) { button(all ? 'INICIAR PARTIDA' : `INICIAR PARTIDA (${rc}/${n} PRONTOS)`, cx - bw / 2, y, bw, 50, startRoom, all ? 'primary' : undefined); y += 58; }
-  if (!NET.err && me) { button(me.ready ? 'CANCELAR PRONTO' : 'PRONTO', cx - bw / 2, y, bw, 50, toggleReady, me.ready ? undefined : 'primary'); y += 58; }
+  y += (teamRoom ? 0 : rowsH) + 10; const bw = Math.min(300, pw);
+  if (NET.host) { button('INICIAR PARTIDA', cx - bw / 2, y, bw, 50, startRoom, all ? 'primary' : undefined); y += 58; }
+  if (!NET.err && me && (!teamRoom || me.team >= 0)) { button(me.ready ? 'CANCELAR PRONTO' : 'PRONTO', cx - bw / 2, y, bw, 50, toggleReady, me.ready ? undefined : 'primary'); y += 58; }
   button('SAIR DA SALA', cx - bw / 2, y, bw, 50, leaveRoom);
   ctx.restore();
 }
