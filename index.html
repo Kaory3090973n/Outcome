@@ -295,23 +295,49 @@ const MAPK = 2.2, cam = { x: 0, y: 0 };   // mapa = MAPK x a área visível; cam
 const input = { keys: {}, mx: 0, my: 0, down: false, buffer: 0, reloadReq: false, interact: false, throwReq: false, coverReq: false, peek: false };
 const CHARS = [
   { id: 'vargo', name: 'VARGO', alias: 'O AÇOUGUEIRO', skin: '#c58a63', skinD: '#8c5a3a', jacket: '#1a1a1f', jDark: '#08080a', stripe: '#34343c', hair: '#1a1a1a', beard: '#2a1f1a', accent: '#c0392b', bare: true, bulk: 1.14, head: 'bald', pads: null,
+    style: 'TANQUE BRUTAL', st: { spd: 3, agi: 3, hp: 8, tgh: 8, str: 9, aim: 2, rel: 3 },
     bio: 'Ex-lutador de rinha que nunca perdeu uma luta e nunca soltou uma garganta. A cicatriz no olho é de quem tentou. Ele não fala. Ele aperta.' },
   { id: 'nox', name: 'NOX', alias: 'O SEM-ROSTO', skin: '#b98a6c', skinD: '#7d563f', jacket: '#26262e', jDark: '#0b0b10', stripe: '#a01f2d', hair: '#1b1b24', accent: '#ff2b2b', glove: '#0d0d11', head: 'hood', pads: null,
+    style: 'ASSASSINO FANTASMA', st: { spd: 7, agi: 8, hp: 3, tgh: 3, str: 5, aim: 7, rel: 3 },
     bio: 'Ninguém viu o rosto de Nox e sobreviveu para descrever. Só os olhos vermelhos entre o capuz e a máscara. Chega calado, sai calado, e a cidade amanhece com menos gente.' },
   { id: 'kain', name: 'KAIN', alias: 'CRISTA DE SANGUE', skin: '#e3c1a8', skinD: '#a8806a', jacket: '#2b1a14', jDark: '#120a08', stripe: '#c9ccd4', hair: '#e0201f', accent: '#e0201f', bare: true, head: 'mohawk', pads: 'spikes',
+    style: 'BRIGÃO DE BECO', st: { spd: 6, agi: 6, hp: 5, tgh: 6, str: 7, aim: 3, rel: 3 },
     bio: 'Cresceu brigando por comida em beco e aprendeu a rir quando machuca. O moicano vermelho não é moda, é aviso. Cobra cada soco com juros.' },
   { id: 'viuva', name: 'VIÚVA', alias: 'A VIÚVA NEGRA DO PORTO', skin: '#e7c9b2', skinD: '#a77f69', jacket: '#5a0f1e', jDark: '#240509', stripe: '#c9a227', hair: '#0e0b0f', accent: '#d4264a', glove: '#111116', head: 'slick', pads: null,
+    style: 'ATIRADORA PACIENTE', st: { spd: 4, agi: 4, hp: 4, tgh: 4, str: 4, aim: 9, rel: 7 },
     bio: 'Dizem que enterrou três maridos e um sócio. Usa o tapa-olho para lembrar quem o tirou. Fria, paciente e sem pressa nenhuma de perdoar.' },
   { id: 'serra', name: 'SERRA', alias: 'O SOLDADO SEM GUERRA', skin: '#a07656', skinD: '#6e4d36', jacket: '#4a5233', jDark: '#1f2414', stripe: '#8b8f6a', hair: '#3a4228', accent: '#7fe0d0', glove: '#1c1f16', head: 'gas', pads: 'plates',
+    style: 'SOLDADO METÓDICO', st: { spd: 3, agi: 3, hp: 6, tgh: 6, str: 4, aim: 8, rel: 6 },
     bio: 'Ex-soldado de uma guerra que ninguém assume. A máscara de gás nunca sai do rosto, nem para dormir. Respira fundo, mira devagar e não deixa testemunha.' },
   // --- personagens provisórios (arte simples, podem ser refeitos depois)
   { id: 'rocha', name: 'ROCHA', alias: 'O MURO DO CAIS', skin: '#8a5a3c', skinD: '#5c3a26', jacket: '#3a2f2a', jDark: '#171210', stripe: '#e0a030', hair: '#161210', beard: '#1a1410', accent: '#e0a030', glove: '#1a1410', bulk: 1.2, head: 'bald', pads: 'plates',
+    style: 'MURO LENTO', st: { spd: 2, agi: 2, hp: 10, tgh: 10, str: 7, aim: 3, rel: 2 },
     bio: 'Carregou container por vinte anos antes de descobrir que dava mais dinheiro derrubar gente. Lento para falar, mais lento ainda para cair. Quem tenta passar por ele para no primeiro soco.' },
   { id: 'lyra', name: 'LYRA', alias: 'A RELÂMPAGO', skin: '#a8714f', skinD: '#6f4630', jacket: '#122a3a', jDark: '#07131c', stripe: '#27c4ff', hair: '#2de2e6', accent: '#27c4ff', glove: '#0b1c28', head: 'slick', pads: null,
+    style: 'VELOCISTA FRÁGIL', st: { spd: 10, agi: 9, hp: 2, tgh: 2, str: 3, aim: 4, rel: 6 },
     bio: 'Corredora de rua que trocou as ruas pelas rinhas. Rápida demais para ser acertada, nervosa demais para parar. Sempre sai antes do trovão chegar.' },
   { id: 'dente', name: 'DENTE', alias: 'O PALHAÇO DA DOCA', skin: '#d7b59a', skinD: '#a07c62', jacket: '#3a1d4d', jDark: '#170a20', stripe: '#3ddc84', hair: '#3ddc84', accent: '#3ddc84', bare: true, head: 'mohawk', pads: null,
+    style: 'CAÓTICO IMPREVISÍVEL', st: { spd: 7, agi: 7, hp: 4, tgh: 5, str: 6, aim: 2, rel: 5 },
     bio: 'Ri o tempo todo, principalmente quando não deveria. Dizem que perdeu metade dos dentes brigando e a outra metade rindo. Ninguém sabe se é maluco ou só gosta de parecer.' },
 ];
+/* ATRIBUTOS DOS PERSONAGENS: cada personagem tem uma nota de 1 a 10 em cada atributo (st). A MESMA tabela vale para o jogo (m = multiplicador)
+   e para a tela PERSONAGENS (barra = nota, texto = efeito real). Nota 5 = igual ao padrão. */
+const sgn = v => (v < 0 ? '-' : '+') + Math.abs(Math.round(v * 100)) + '%';
+const CSTATS = [
+  { k: 'spd', label: 'VELOCIDADE',  m: r => 1 + (r - 5) * .05, txt: m => Math.round(C.moveSpeed * m) + ' px/s' },
+  { k: 'agi', label: 'AGILIDADE',   m: r => 1 + (r - 5) * .08, txt: m => sgn(m - 1) + ' resposta' },   // arranque e freada
+  { k: 'hp',  label: 'VIDA',        m: r => 1 + (r - 5) * .05, txt: m => Math.round(100 * m) + ' HP' },
+  { k: 'tgh', label: 'RESISTÊNCIA', m: r => 1 - (r - 5) * .07, txt: m => (C.throwStun * m).toFixed(1) + 's nocaute' },   // menos tempo caído e menos empurrão
+  { k: 'str', label: 'FORÇA',       m: r => 1 + (r - 5) * .05, txt: m => Math.round(C.punchDamage * m) + ' por soco' },
+  { k: 'aim', label: 'CONTROLE',    m: r => 1 - (r - 5) * .06, txt: m => sgn(m - 1) + ' dispersão' },   // mira firme = tiro mais certeiro
+  { k: 'rel', label: 'RECARGA',     m: r => 1 - (r - 5) * .06, txt: m => sgn(m - 1) + ' tempo' },
+];
+function applyChar(f) {   // aplica os atributos do personagem (f.pal.st) no lutador recém-criado
+  const st = f.pal && f.pal.st; if (!st) return;
+  const m = k => CSTATS.find(q => q.k === k).m(st[k]);
+  f.speed = Math.round(f.speed * m('spd')); f.maxHp = Math.round(f.maxHp * m('hp')); f.hp = f.maxHp; f.punchDmg *= m('str');
+  f.mAgi = m('agi'); f.mAim = m('aim'); f.mRel = m('rel'); f.mTgh = m('tgh');
+}
 
 /* ------------------------------ INPUT --------------------------------- */
 addEventListener('keydown', e => {
@@ -475,7 +501,7 @@ addEventListener('resize', resize); resize();
 /* ---------------------------- FIGHTERS -------------------------------- */
 function makeFighter(o) {
   return Object.assign({
-    x: 0, y: 0, vx: 0, vy: 0, angle: 0, hp: 100, maxHp: 100, speed: C.moveSpeed, r: C.r, punchDmg: C.punchDamage,
+    x: 0, y: 0, vx: 0, vy: 0, angle: 0, hp: 100, maxHp: 100, speed: C.moveSpeed, r: C.r, punchDmg: C.punchDamage, mAgi: 1, mAim: 1, mRel: 1, mTgh: 1,
     cover: null, isCovered: false, peekK: 0, leanS: 1, coverOff: { x: 0, y: 0 }, coverBlock: false, stun: 0, stunMax: 1, fallDir: 1, throwCd: 0, emptyT: 0,
     swing: -1, swingHits: new Set(), weapon: null, mag: 0, reserve: 0, fireCd: 0, reloadT: 0, reloadMax: 1, kick: 0, flash: 0, hitFlash: 0,
     twist: 0, walk: 0, combo: 0, comboTimer: 0, cooldown: 0, nextHand: 'left', dead: false, isPlayer: false,
@@ -509,6 +535,7 @@ function spawnBot(b) {
   Object.assign(b, makeFighter({ x: p.x, y: p.y, hp: d.hp, maxHp: d.hp, speed: d.speed * rnd(.92, 1.08), punchDmg: 10,
     pal: b.pal, respawnT: 0, strafe: Math.random() < .5 ? 1 : -1,
     strafeT: rnd(1, 3), burstT: rnd(.3, 1), burstOn: false, aimBias: 0, biasT: 0, stuckT: 0, detourT: 0, angle: rnd(0, TAU), tgt: null, tgtT: 0 }));
+  applyChar(b);
 }
 
 function updateCam() {   // câmera presa ao personagem (para só nas bordas do mapa); eliminado = acompanha um bot vivo
@@ -525,6 +552,7 @@ function startGame(tr, keepKills) {
   player = makeFighter({ x: WW * sp[0], y: WH * sp[1], isPlayer: true, pid: 0,
     pal: CHARS[cfg.char], team: 0 });
   if (inCrate(player.x, player.y, 30)) Object.assign(player, freeSpot());
+  applyChar(player);
   bots = [];
   const hum = [cfg.char, ...(NET.online ? NET.guests.map(g => g.char) : [])]; let pool = [...new Set([...(NET.others || []), ...CHARS.map((_, i) => i)])].filter(i => !hum.includes(i)); if (!pool.length) pool = CHARS.map((_, i) => i);   // bots usam os personagens que nenhum jogador escolheu
   const tm = !training && M && M.team;   // partida por times: os primeiros (n-1) bots são aliados do jogador
@@ -627,7 +655,7 @@ const enemiesOf = f => [player, ...bots].filter(o => o !== f && !o.dead && o.tea
 function damage(t, dmg, ang, src) {
   if (t.dead) return;
   t.hp -= dmg; t.hitFlash = .1;
-  t.vx += Math.cos(ang) * 90; t.vy += Math.sin(ang) * 90;
+  t.vx += Math.cos(ang) * 90 * t.mTgh; t.vy += Math.sin(ang) * 90 * t.mTgh;
   for (let i = 0; i < 3; i++) addDecal(t.x + rnd(-10, 10) + Math.cos(ang) * 10, t.y + rnd(-10, 10) + Math.sin(ang) * 10, rnd(2, 5));
   if (t.isPlayer) { dmgFlash = .45; shake = Math.max(shake, 5); }
   if (t.hp <= 0) kill(t, src);
@@ -647,14 +675,14 @@ function shoot(f, w) {
   if (NET.online && NET.host) NET.ev.push(['s', f.weapon, Math.round(f.x), Math.round(f.y)]);
   const m = toWorld(f, holdX(w) + w.muzzle, 0); m.x += f.coverOff.x; m.y += f.coverOff.y;
   for (let i = 0; i < w.pellets; i++) {
-    const sp = f.cover ? (f.peekK > .5 ? 0 : w.spread + .1) : w.spread, a = f.angle + rnd(-sp, sp);   // espiando: 100% de precisão | tiro cego: dispersão extra
+    const sp = (f.cover ? (f.peekK > .5 ? 0 : w.spread + .1) : w.spread) * f.mAim, a = f.angle + rnd(-sp, sp);   // espiando: 100% de precisão | tiro cego: dispersão extra
     if (!sweepShot(f, a, m, w)) { const tr = { pts: [{ x: m.x, y: m.y, t: btClock }] }; btrails.push(tr); bullets.push({ id: ++NETBID, x: m.x, y: m.y, vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed, dmg: w.dmg, owner: f, life: w.life, tr }); }
   }
   const e = toWorld(f, holdX(w) + 8, 5);
   casings.push({ x: e.x, y: e.y, vx: Math.cos(f.angle + 1.5) * rnd(60, 130), vy: Math.sin(f.angle + 1.5) * rnd(60, 130), rot: rnd(0, TAU), vr: rnd(-15, 15), life: .9, big: w.pellets > 1 });
   f.vx -= Math.cos(f.angle) * w.kick * 6; f.vy -= Math.sin(f.angle) * w.kick * 6;
   if (f.isPlayer) { shake = Math.max(shake, w.kick * .7); input.buffer = 0; } else if (f.remote) f.rbuf = 0;
-  if (f.mag === 0 && f.reserve > 0) { f.reloadT = f.reloadMax = w.reload; }
+  if (f.mag === 0 && f.reserve > 0) { f.reloadT = f.reloadMax = w.reload * f.mRel; }
 }
 
 /* Tiro à queima-roupa: o cano fica longe do corpo, então confere o trecho corpo -> cano antes de criar a bala */
@@ -687,7 +715,7 @@ function landThrown(t) {
 function hitByThrown(t, f) {
   t.hits.add(f);
   const a = Math.atan2(t.vy, t.vx);
-  f.stun = f.stunMax = C.throwStun; f.fallDir = Math.random() < .5 ? -1 : 1; f.hitFlash = .12;
+  f.stun = f.stunMax = C.throwStun * f.mTgh; f.fallDir = Math.random() < .5 ? -1 : 1; f.hitFlash = .12;
   f.vx += Math.cos(a) * 240; f.vy += Math.sin(a) * 240;
   rings.push({ x: f.x, y: f.y, r: 8, life: 1, heavy: true });
   for (let i = 0; i < 8; i++) { const b = a + rnd(-.9, .9), sp = rnd(160, 380); sparks.push({ x: f.x, y: f.y, vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, life: 1 }); }
@@ -726,8 +754,8 @@ function updateFighter(f, dt, it) {
 
   // Movimento
   let { mx, my } = it; const l = Math.hypot(mx, my); if (l > 1) { mx /= l; my /= l; }
-  f.vx = approach(f.vx, mx * f.speed, (mx ? C.accel : C.friction) * dt);
-  f.vy = approach(f.vy, my * f.speed, (my ? C.accel : C.friction) * dt);
+  f.vx = approach(f.vx, mx * f.speed, (mx ? C.accel : C.friction) * f.mAgi * dt);
+  f.vy = approach(f.vy, my * f.speed, (my ? C.accel : C.friction) * f.mAgi * dt);
   f.x += f.vx * dt; f.y += f.vy * dt;
   f.walk += Math.hypot(f.vx, f.vy) * dt * .065;     // fase da caminhada
   collide(f);
@@ -760,8 +788,8 @@ function updateFighter(f, dt, it) {
       }
     } else {
       if (f.reloadT > 0) { f.reloadT -= dt; if (f.reloadT <= 0) { const n = Math.min(w.mag - f.mag, f.reserve); f.mag += n; f.reserve -= n; } }
-      else if (it.reload && f.mag < w.mag && f.reserve > 0) f.reloadT = f.reloadMax = w.reload;
-      else if (it.fire && f.fireCd <= 0) { if (f.mag > 0) shoot(f, w); else if (f.reserve > 0) f.reloadT = f.reloadMax = w.reload; }
+      else if (it.reload && f.mag < w.mag && f.reserve > 0) f.reloadT = f.reloadMax = w.reload * f.mRel;
+      else if (it.fire && f.fireCd <= 0) { if (f.mag > 0) shoot(f, w); else if (f.reserve > 0) f.reloadT = f.reloadMax = w.reload * f.mRel; }
       if (!f.isPlayer && !f.remote && !f.mag && !f.reserve && f.reloadT <= 0) { f.emptyT += dt; if (f.emptyT > .7) f.weapon = null; } else f.emptyT = 0;
     }
   } else if (it.punch) tryPunch(f);
@@ -2183,6 +2211,16 @@ function drawChars(t) {
   const rx = wide ? W * .53 : 24, rw = wide ? W * .42 : W - 48; let y = wide ? 170 : base + 24;
   txt(P.name, rx, y, clamp(W / 40, 24, 38), P.accent, 'left'); txt(P.alias, rx, y + 32, 14, '#e7e4d3', 'left');
   const bioEnd = wrapTxt(P.bio, rx, y + 66, rw, 22, 14, 'rgba(255,255,255,.82)');
+  let sy = bioEnd + 28;   // atributos do personagem (mesmo formato da tela ARMAS)
+  txt('ESTILO: ' + P.style, rx, sy, 13, P.accent, 'left'); sy += 32;
+  const abw = clamp(rw - 270, 100, 260), astep = clamp((H - 110 - sy) / CSTATS.length, 22, 34);
+  for (const q of CSTATS) {
+    const r = P.st[q.k];
+    txt(q.label, rx, sy, 13, '#fff', 'left');
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.roundRect(rx + 120, sy - 6, abw, 12, 6); ctx.fill();
+    ctx.fillStyle = P.accent; ctx.beginPath(); ctx.roundRect(rx + 120, sy - 6, Math.max(abw * clamp(r / 10, .03, 1), 12), 12, 6); ctx.fill();
+    txt(q.txt(q.m(r)), rx + 120 + abw + 12, sy, 12, '#e7e4d3', 'left'); sy += astep;
+  }
   const by = H - 80;
   button('<', cx - 68, by, 60, 46, () => { chIdx = (chIdx + n - 1) % n; });
   cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
@@ -2197,6 +2235,13 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 50, v: '0.29.0', title: 'Atributos dos personagens',
+    criado: [
+      'Cada personagem agora tem 7 atributos com nota de 1 a 10, pensados no jeito de cada um: VELOCIDADE, AGILIDADE, VIDA, RESISTÊNCIA, FORÇA, CONTROLE e RECARGA. Os 8 personagens atuais têm perfis bem diferentes (tanque lento, velocista frágil, atiradora precisa, brigão forte, assassino ágil, muro resistente, soldado metódico e caótico imprevisível), todos com a mesma soma de pontos, então ninguém é melhor em tudo.',
+      'Na tela PERSONAGENS, embaixo da descrição, aparece o ESTILO do personagem e as 7 barras de atributo com o efeito real de cada um, no mesmo formato da tela ARMAS.',
+      'Os atributos valem de verdade na partida (jogador, bots e amigos online): VELOCIDADE muda a corrida; AGILIDADE muda o arranque e a freada; VIDA muda os pontos de vida; RESISTÊNCIA diminui o tempo de nocaute e o empurrão ao levar dano; FORÇA muda o dano do soco; CONTROLE diminui a dispersão dos tiros; RECARGA muda o tempo para recarregar.',
+      'A tabela de atributos fica em um lugar só (CSTATS), usada pelo jogo e pela tela, e cada personagem novo só precisa das 7 notas (st) e de uma linha de estilo (style).',
+    ] },
   { n: 49, v: '0.28.3', title: 'Votação de mapa igual à de personagem',
     modificado: [
       'A votação de mapa agora tem o mesmo layout da escolha de personagem: em cima aparece o mapa votado por cada jogador (você à esquerda) e embaixo a grade de 9 colunas e 3 linhas, com os mesmos retângulos deitados, 26 vagas de mapa e o ? do ALEATÓRIO no centro.',
@@ -3038,7 +3083,7 @@ function assignRemotes() {   // a cada rodada, cada amigo assume um lutador (em 
   NET.guests.forEach((g, k) => {
     const want = M && M.team ? (g.st !== null && g.st !== undefined ? g.st : (k + 1) % 2) : null;   // time escolhido na sala
     const b = bots.find(x => !used.has(x) && (want === null || x.team === want)) || bots.find(x => !used.has(x)); if (!b) return; used.add(b);
-    Object.assign(b, { remote: true, cid: g.id, ci: g.ci, pal: CHARS[g.char], hp: 100, maxHp: 100, speed: C.moveSpeed, punchDmg: C.punchDamage, rin: NET.rin[g.id], rl: null, rbuf: 0, coverReq: false });
+    Object.assign(b, { remote: true, cid: g.id, ci: g.ci, pal: CHARS[g.char], hp: 100, maxHp: 100, speed: C.moveSpeed, punchDmg: C.punchDamage, rin: NET.rin[g.id], rl: null, rbuf: 0, coverReq: false }); applyChar(b);
   });
 }
 function netSnap() {
