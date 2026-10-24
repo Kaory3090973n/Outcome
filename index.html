@@ -2188,6 +2188,13 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 39, v: '0.25.2', title: 'Sem sombra escura ao redor do personagem',
+    removido: [
+      'A névoa escura e a vinheta (bordas escurecidas) que cercavam o personagem durante a partida (função de desenho da partida, camada final da tela).',
+    ],
+    modificado: [
+      'Todo o mapa aparece claro e igual em toda a tela, com um leve clareamento no piso para facilitar a visão.',
+    ] },
   { n: 38, v: '0.25.1', title: 'Visão e mapa iguais em todas as telas',
     modificado: [
       'Zoom do PC (função resize): agora usa o MAIOR entre largura/1200 e altura/675, em vez do menor. Assim nenhuma tela enxerga mais que 1200 x 675 do mapa, e telas menores ou de outro formato não enxergam menos que as grandes na mesma proporção.',
@@ -2940,8 +2947,8 @@ function loop(now) {
       const fl = fistLocal(f, h), w = toWorld(f, fl.x, fl.y); ctx.strokeStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w.x, w.y, C.hitRadius, 0, TAU); ctx.stroke();
     }
     ctx.restore();
-    ctx.fillStyle = vignette; ctx.fillRect(0, 0, innerWidth, innerHeight);
-    { const fx = (player.x - cam.x) * ZOOM, fy = (player.y - cam.y) * ZOOM; ctx.save(); ctx.translate(fx, fy); ctx.fillStyle = fog; ctx.fillRect(-fx, -fy, innerWidth, innerHeight); ctx.restore(); }
+    // sem vinheta nem névoa escura ao redor do personagem: o mapa inteiro aparece claro; um leve clareamento deixa o piso mais visível
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.restore();
     drawHUD(menuT);
     if (state === 'dead') drawDead();
     if (state === 'pause') drawPause();
