@@ -2197,6 +2197,23 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 49, v: '0.28.3', title: 'Votação de mapa igual à de personagem',
+    modificado: [
+      'A votação de mapa agora tem o mesmo layout da escolha de personagem: em cima aparece o mapa votado por cada jogador (você à esquerda) e embaixo a grade de 9 colunas e 3 linhas, com os mesmos retângulos deitados, 26 vagas de mapa e o ? do ALEATÓRIO no centro.',
+      'As vagas EM BREVE (de mapa e de personagem) ficaram só com o rabisco do cartão TUTORIAL (listras e borda tracejada). O texto EM BREVE só aparece quando o mouse passa por cima.',
+    ],
+    removido: ['A grade de 16 mapas em 2 linhas e a barra ALEATÓRIO embaixo dela.'] },
+  { n: 48, v: '0.28.2', title: 'Retângulos deitados e grade de 16 mapas',
+    modificado: [
+      'Na seleção de personagem, cada personagem agora fica num retângulo deitado (mais largo que alto), mostrando a cabeça e os ombros.',
+      'A votação de mapa usa o mesmo formato de grade: 16 vagas de mapa em retângulos deitados, com a miniatura e o nome. Os 3 mapas atuais ocupam as primeiras vagas e as outras 13 aparecem como EM BREVE. O ALEATÓRIO ficou numa barra embaixo da grade.',
+      'As vagas vazias da seleção de personagem também mostram EM BREVE.',
+    ] },
+  { n: 47, v: '0.28.1', title: 'Grade de personagens em retângulos e 26 vagas',
+    modificado: [
+      'Na seleção de personagem, cada personagem agora aparece num retângulo em pé (cabeça e ombros) em vez de um quadrado, e a grade tem 3 linhas.',
+      'A grade já tem as 26 vagas previstas para o jogo, com o ? do aleatório no centro. Só as 8 primeiras estão ocupadas pelos personagens atuais; as outras aparecem vazias e vão sendo preenchidas quando novos personagens forem criados.',
+    ] },
   { n: 46, v: '0.28.0', title: 'Votação de mapa e escolha de personagem',
     criado: [
       'Depois que o anfitrião toca em INICIAR PARTIDA (com todos prontos), aparece a votação de MAPA para todos da sala: os três mapas e a opção ALEATÓRIO, com 12 segundos de tempo. Bolinhas coloridas mostram quem votou em cada um.',
@@ -2830,7 +2847,8 @@ function startOnline(m) {   // todos entram na mesma partida: o anfitrião simul
   touch.ang = 0; updateCam(); setState('play');
 }
 /* ---- SELEÇÃO ANTES DA PARTIDA: votação de mapa e escolha de personagem (o anfitrião decide; todos clicam) ---- */
-const SEL_MAP_T = 12, SEL_CHAR_T = 25, ROLL_T = 2.6, SLOTS = [0, 1, 2, 3, -1, 4, 5, 6, 7], PCOL = ['#8fd6a4', '#ff7a6b', '#7ac7ff', '#ffd23f', '#d79bff', '#ffa24d', '#5de0d0', '#f48fb1'];
+const SEL_MAP_T = 12, SEL_CHAR_T = 25, ROLL_T = 2.6, SLOTS = Array.from({ length: 27 }, (_, q) => { const i = q < 13 ? q : q - 1; return q === 13 ? -1 : i < CHARS.length ? i : -2; })   /* 26 vagas de personagem + o aleatório no meio; -2 = vaga vazia */, PCOL = ['#8fd6a4', '#ff7a6b', '#7ac7ff', '#ffd23f', '#d79bff', '#ffa24d', '#5de0d0', '#f48fb1'];
+const MSLOTS = Array.from({ length: 27 }, (_, q) => { const i = q < 13 ? q : q - 1; return q === 13 ? -1 : i < MAPS.length ? i : -2; });   // mesma grade do personagem: 26 vagas de mapa + o aleatório no meio; -2 = vaga vazia
 const pname = id => id === 'host' ? 'ANFITRIÃO' : 'JOGADOR ' + (Math.max(1, NET.players.findIndex(q => q.id === id)) + 1);
 const pcol = id => { const p = NET.players.find(q => q.id === id); if (NET.snap && NET.snap.team > 0 && p && p.team >= 0) return p.team ? '#ff7a6b' : '#8fd6a4'; return PCOL[Math.max(0, NET.players.findIndex(q => q.id === id)) % PCOL.length]; };
 const pickAvail = s => { const t = Object.values(s.conf); return CHARS.map((_, i) => i).filter(i => !t.includes(i)); };
@@ -2918,61 +2936,81 @@ function drawPick(t) {
   else if (s.ph === 'roll') hint = 'SORTEANDO PERSONAGEM...';
   else hint = 'PREPARANDO A PARTIDA...';
   wrapLines(hint, Math.min(IW - 40, 760), 12).forEach((l, i) => txt(l, cx, 86 + i * 16, 12, MUTE, 'center'));
-  if (mapPh) {
-    const n = MAPS.length + 1, gap = 16, cw = Math.min(230, (IW - 40 - gap * (n - 1)) / n), ch = Math.min(cw * 1.3, IH - 250), x0 = cx - (n * cw + (n - 1) * gap) / 2, y = Math.max(124, 124 + (IH - 210 - ch) / 2);
-    for (let i = 0; i < n; i++) {
-      const mp = MAPS[i], x = x0 + i * (cw + gap), res = s.ph === 'mapres', win = res && (s.mr ? i === MAPS.length : i === s.map), mine = s.votes[me] === i, hov = s.ph === 'map' && over(x, y, cw, ch), vs = s.ids.filter(id => s.votes[id] === i);
-      ctx.globalAlpha = res && !win ? .35 : 1;
-      ctx.beginPath(); ctx.roundRect(x + .5, y + .5, cw - 1, ch - 1, 16); ctx.fillStyle = mine || win ? 'rgba(255,255,255,.09)' : hov ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.03)'; ctx.fill();
-      ctx.strokeStyle = win ? (mp ? mp.accent : INK) : mine ? INK : hov ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = win || mine ? 2.5 : 1; ctx.stroke();
-      const pw = cw - 20, ph = pw * .62; drawMapPreview(mp, x + 10, y + 10, pw, ph);
-      if (!mp) txt('?', x + cw / 2, y + 10 + ph / 2 + 2, ph * .7, INK, 'center');
-      txt(mp ? mp.name : 'ALEATÓRIO', x + cw / 2, y + ph + 34, clamp(cw / 11, 12, 18), mine || win ? INK : MUTE, 'center');
-      txt(mp ? mp.sub : 'SORTEIA UM MAPA', x + cw / 2, y + ph + 56, clamp(cw / 20, 8, 10), '#5c5c68', 'center');
-      const vr = 8, vw = Math.min(vs.length, 8) * (vr * 2 + 4) - 4, vy = y + ch - 20;
-      vs.slice(0, 8).forEach((id, j) => { ctx.beginPath(); ctx.arc(x + cw / 2 - vw / 2 + vr + j * (vr * 2 + 4), vy, vr, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); if (id === me) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); } });
-      ctx.globalAlpha = 1;
-      if (s.ph === 'map') ui.push({ x: x * k, y: y * k, w: cw * k, h: ch * k, fn: () => { sfxBeep(520, .06); mapClick(i); } });
-    }
-  } else {
-    const n9 = SLOTS.length, gap = 8, T = clamp(Math.min(86, (IW - 40 - gap * (n9 - 1)) / n9), 44, 86), gx0 = cx - (n9 * T + (n9 - 1) * gap) / 2, gy = IH - 84 - T;
-    const canMe = s.ph === 'char' && s.conf[me] === undefined, takenBy = c => c >= 0 ? s.ids.find(id => s.conf[id] === c) : undefined;
-    let hovC = -2; if (canMe) SLOTS.forEach((c, q) => { if (c >= 0 && takenBy(c) === undefined && over(gx0 + q * (T + gap), gy, T, T)) hovC = c; });
-    const myP = NET.players.find(p => p.id === me), teamRoom = NET.snap && NET.snap.team > 0 && myP && myP.team >= 0;
-    const rank = id => id === me ? 0 : teamRoom && (NET.players.find(p => p.id === id) || {}).team === myP.team ? 1 : 2, ord = [...s.ids].sort((a, b) => rank(a) - rank(b)), nn = Math.max(1, ord.length);
-    const top = 124, bot = gy - 16, sc = clamp(Math.min(IW / nn * .78 / 215, (bot - top - 54) / 275), .3, 1.3), base = bot - 54, sw = IW / nn;
-    ord.forEach((id, j) => {   // personagens de cada jogador em cima (você à esquerda)
-      const sx = sw * (j + .5), cf = s.conf[id], mk = s.marks[id], rolling = !!s.roll && s.roll.who === id;
-      const c = rolling ? s.roll.cur : cf !== undefined ? cf : id === me && hovC >= 0 ? hovC : mk !== undefined ? mk : -2, P = c >= 0 ? CHARS[c] : null, col = pcol(id);
-      const status = rolling ? 'SORTEANDO...' : cf >= 0 ? 'ESCOLHIDO' : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : id === me && hovC >= 0 ? 'PRÉVIA' : mk >= 0 ? 'MARCADO' : 'ESCOLHENDO...';
+  const COLS = 9, ROWS = 3, gap = 8; let T = clamp(Math.min(120, (IW - 40 - gap * (COLS - 1)) / COLS), 40, 120); const TH = Math.min(T * .72, (IH * .4 - gap * (ROWS - 1)) / ROWS); T = Math.min(T, TH * 1.7); const gx0 = cx - (COLS * T + (COLS - 1) * gap) / 2, gy = IH - 84 - (ROWS * TH + (ROWS - 1) * gap), tpos = q => ({ x: gx0 + (q % COLS) * (T + gap), y: gy + Math.floor(q / COLS) * (TH + gap) });   // mesma grade para MAPA e PERSONAGEM
+  const soonTile = (x, y) => {   // vaga vazia: só o rabisco do cartão TUTORIAL (listras + borda tracejada); o texto EM BREVE só aparece com o mouse em cima
+    const hv = over(x, y, T, TH);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x + .5, y + .5, T - 1, TH - 1, 10); ctx.fillStyle = 'rgba(255,255,255,.02)'; ctx.fill(); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 1; for (let i = -TH; i < T; i += 14) { ctx.beginPath(); ctx.moveTo(x + i, y + TH); ctx.lineTo(x + i + TH, y); ctx.stroke(); } ctx.restore();
+    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, T - 1, TH - 1, 10); ctx.setLineDash([6, 6]); ctx.strokeStyle = hv ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.16)'; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    if (hv) txt('EM BREVE', x + T / 2, y + TH / 2, clamp(T / 10, 8, 12), MUTE, 'center');
+  };
+  const RI = MAPS.length, GS = mapPh ? MSLOTS : SLOTS;
+  const voters = (i, x, y) => s.ids.filter(id => s.votes[id] === i).slice(0, 8).forEach((id, j) => { ctx.beginPath(); ctx.arc(x + j * 13, y, 5.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); if (id === me) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); } });
+  const canMe = mapPh ? s.ph === 'map' : s.ph === 'char' && s.conf[me] === undefined, takenBy = c => c >= 0 ? s.ids.find(id => s.conf[id] === c) : undefined;
+  let hovC = -2; if (canMe) GS.forEach((c, q) => { const o = tpos(q); if (c >= 0 && takenBy(c) === undefined && over(o.x, o.y, T, TH)) hovC = c; });
+  const myP = NET.players.find(p => p.id === me), teamRoom = NET.snap && NET.snap.team > 0 && myP && myP.team >= 0;
+  const rank = id => id === me ? 0 : teamRoom && (NET.players.find(p => p.id === id) || {}).team === myP.team ? 1 : 2, ord = [...s.ids].sort((a, b) => rank(a) - rank(b)), nn = Math.max(1, ord.length);
+  const top = 124, bot = gy - 16, sc = clamp(Math.min(IW / nn * .78 / 215, (bot - top - 54) / 275), .3, 1.3), base = bot - 54, sw = IW / nn;
+  ord.forEach((id, j) => {   // em cima: a escolha de cada jogador (você à esquerda)
+    const sx = sw * (j + .5);
+    if (mapPh) {   // MAPA: miniatura grande do mapa votado, no lugar do busto
+      const vt = s.votes[id], v = id === me && hovC >= 0 ? hovC : vt, P = v >= 0 && v < RI ? MAPS[v] : null, col = pcol(id);
+      const status = id === me && hovC >= 0 ? 'PRÉVIA' : vt === undefined ? 'ESCOLHENDO...' : vt === RI ? 'ALEATÓRIO' : 'VOTOU';
+      const ph0 = Math.min(clamp(sw * .8, 90, 340) * .62, base - top - 8), pw = ph0 / .62, px = sx - pw / 2, py = base - 8 - ph0 + Math.sin(t * 1.6 + j) * 1.5;
       ctx.save(); ctx.beginPath(); ctx.rect(sx - sw / 2, top - 10, sw, bot - top + 10); ctx.clip();
       if (P) {
-        const g = ctx.createRadialGradient(sx, base - 150 * sc, 10, sx, base - 150 * sc, 230 * sc); g.addColorStop(0, P.accent + '3a'); g.addColorStop(1, P.accent + '00'); ctx.fillStyle = g; ctx.fillRect(sx - sw / 2, top - 10, sw, bot - top + 10);
-        ctx.save(); ctx.translate(sx, base + Math.sin(t * 1.6 + j) * 1.5); ctx.scale(sc, sc); drawBust(P); ctx.restore();
-        const fd = ctx.createLinearGradient(0, base - 50 * sc, 0, base); fd.addColorStop(0, 'rgba(13,13,17,0)'); fd.addColorStop(1, '#0d0d11'); ctx.fillStyle = fd; ctx.fillRect(sx - sw / 2, base - 50 * sc, sw, 50 * sc + 1);
-      } else txt('?', sx, base - 130 * sc, 110 * sc, 'rgba(255,255,255,.1)', 'center');
-      txt(P ? P.name : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : '???', sx, base + 18, clamp(20 * sc + 4, 13, 24), P ? P.accent : MUTE, 'center');
+        const g = ctx.createRadialGradient(sx, py + ph0 / 2, 10, sx, py + ph0 / 2, Math.max(pw, ph0)); g.addColorStop(0, P.accent + '3a'); g.addColorStop(1, P.accent + '00'); ctx.fillStyle = g; ctx.fillRect(sx - sw / 2, top - 10, sw, bot - top + 10);
+        drawMapPreview(P, px, py, pw, ph0); ctx.beginPath(); ctx.roundRect(px + .5, py + .5, pw - 1, ph0 - 1, 12); ctx.strokeStyle = P.accent; ctx.lineWidth = 2; ctx.stroke();
+      } else { ctx.beginPath(); ctx.roundRect(px + .5, py + .5, pw - 1, ph0 - 1, 12); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke(); txt('?', sx, py + ph0 / 2 + 2, ph0 * .6, 'rgba(255,255,255,.1)', 'center'); }
+      txt(P ? P.name : vt === RI ? 'ALEATÓRIO' : '???', sx, base + 18, clamp(20 * sc + 4, 13, 24), P ? P.accent : MUTE, 'center');
       txt(pname(id) + (id === me ? ' (VOCÊ)' : ''), sx, base + 36, 11, col, 'center');
       txt(status, sx, base + 50, 10, 'rgba(231,228,211,.55)', 'center');
-      ctx.restore();
-    });
-    SLOTS.forEach((c, q) => {   // grade de escolha: um clique marca, dois confirmam
-      const x = gx0 + q * (T + gap), owner = takenBy(c), isMine = canMe && s.marks[me] === c, canPick = canMe && owner === undefined, hov = canPick && over(x, gy, T, T), rc = !!s.roll && c >= 0 && s.roll.cur === c;
-      ctx.save(); ctx.beginPath(); ctx.roundRect(x, gy, T, T, 10); ctx.clip();
-      ctx.fillStyle = rc ? '#2a2a34' : '#16161d'; ctx.fillRect(x, gy, T, T);
-      if (c >= 0) { const sf = (T - 16) / 136; ctx.save(); ctx.beginPath(); ctx.rect(x, gy, T, T - 16); ctx.clip(); ctx.translate(x + T / 2, gy + (T - 16) / 2 + 192 * sf); ctx.scale(sf, sf); drawBust(CHARS[c]); ctx.restore(); }
-      else txt('?', x + T / 2, gy + (T - 16) / 2 + 2, T * .5, hov || isMine ? INK : MUTE, 'center');
-      if (owner !== undefined) { ctx.fillStyle = 'rgba(0,0,0,.62)'; ctx.fillRect(x, gy, T, T - 16); }
-      ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, gy + T - 16, T, 16);
-      txt(isMine ? 'CONFIRMAR' : c >= 0 ? CHARS[c].name : 'ALEATÓRIO', x + T / 2, gy + T - 8, clamp(T / 9, 7, 10), isMine ? INK : 'rgba(231,228,211,.85)', 'center');
-      ctx.restore();
-      ctx.beginPath(); ctx.roundRect(x + .5, gy + .5, T - 1, T - 1, 10);
-      ctx.strokeStyle = rc ? pcol(s.roll.who) : owner !== undefined ? pcol(owner) : isMine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = rc || isMine || owner !== undefined ? 3 : hov ? 2 : 1; ctx.stroke();
-      if (owner !== undefined) txt(owner === me ? 'VOCÊ' : owner === 'host' ? 'ANF.' : pname(owner).replace('JOGADOR ', 'J'), x + T / 2, gy + (T - 16) / 2, clamp(T / 7, 9, 13), pcol(owner), 'center');
-      let dj = 0; if (s.ph === 'char') for (const id of s.ids) if (id !== me && s.conf[id] === undefined && s.marks[id] === c) { ctx.beginPath(); ctx.arc(x + T - 10 - dj * 11, gy + 10, 4.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); dj++; }
-      if (canPick) ui.push({ x: x * k, y: gy * k, w: T * k, h: T * k, fn: () => { sfxBeep(isMine ? 880 : 620, .06); charClick(c); } });
-    });
-  }
+      ctx.restore(); return;
+    }
+    const cf = s.conf[id], mk = s.marks[id], rolling = !!s.roll && s.roll.who === id;
+    const c = rolling ? s.roll.cur : cf !== undefined ? cf : id === me && hovC >= 0 ? hovC : mk !== undefined ? mk : -2, P = c >= 0 ? CHARS[c] : null, col = pcol(id);
+    const status = rolling ? 'SORTEANDO...' : cf >= 0 ? 'ESCOLHIDO' : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : id === me && hovC >= 0 ? 'PRÉVIA' : mk >= 0 ? 'MARCADO' : 'ESCOLHENDO...';
+    ctx.save(); ctx.beginPath(); ctx.rect(sx - sw / 2, top - 10, sw, bot - top + 10); ctx.clip();
+    if (P) {
+      const g = ctx.createRadialGradient(sx, base - 150 * sc, 10, sx, base - 150 * sc, 230 * sc); g.addColorStop(0, P.accent + '3a'); g.addColorStop(1, P.accent + '00'); ctx.fillStyle = g; ctx.fillRect(sx - sw / 2, top - 10, sw, bot - top + 10);
+      ctx.save(); ctx.translate(sx, base + Math.sin(t * 1.6 + j) * 1.5); ctx.scale(sc, sc); drawBust(P); ctx.restore();
+      const fd = ctx.createLinearGradient(0, base - 50 * sc, 0, base); fd.addColorStop(0, 'rgba(13,13,17,0)'); fd.addColorStop(1, '#0d0d11'); ctx.fillStyle = fd; ctx.fillRect(sx - sw / 2, base - 50 * sc, sw, 50 * sc + 1);
+    } else txt('?', sx, base - 130 * sc, 110 * sc, 'rgba(255,255,255,.1)', 'center');
+    txt(P ? P.name : (cf === -1 || mk === -1) ? 'ALEATÓRIO' : '???', sx, base + 18, clamp(20 * sc + 4, 13, 24), P ? P.accent : MUTE, 'center');
+    txt(pname(id) + (id === me ? ' (VOCÊ)' : ''), sx, base + 36, 11, col, 'center');
+    txt(status, sx, base + 50, 10, 'rgba(231,228,211,.55)', 'center');
+    ctx.restore();
+  });
+  GS.forEach((c, q) => {   // grade de baixo (26 vagas + aleatório no meio): igual para mapa e personagem
+    const { x, y } = tpos(q);
+    if (c === -2) { soonTile(x, y); return; }
+    if (mapPh) {   // MAPA: um clique vota (dá para trocar o voto até o fim)
+      const v = c >= 0 ? c : RI, mp = c >= 0 ? MAPS[c] : null, res = s.ph === 'mapres', win = res && (c >= 0 ? !s.mr && c === s.map : s.mr), mine = s.votes[me] === v, hov = canMe && over(x, y, T, TH);
+      ctx.globalAlpha = res && !win ? .35 : 1;
+      ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, T, TH, 10); ctx.clip(); ctx.fillStyle = '#16161d'; ctx.fillRect(x, y, T, TH);
+      if (mp) drawMapPreview(mp, x, y, T, TH - 16); else txt('?', x + T / 2, y + (TH - 16) / 2 + 2, T * .55, hov || mine ? INK : MUTE, 'center');
+      ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, y + TH - 16, T, 16);
+      txt(mp ? mp.name : 'ALEATÓRIO', x + T / 2, y + TH - 8, clamp(T / 9, 7, 10), mine || win ? INK : 'rgba(231,228,211,.85)', 'center'); ctx.restore();
+      ctx.beginPath(); ctx.roundRect(x + .5, y + .5, T - 1, TH - 1, 10); ctx.strokeStyle = win ? (mp ? mp.accent : INK) : mine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = win || mine ? 3 : hov ? 2 : 1; ctx.stroke();
+      voters(v, x + 10, y + 10); ctx.globalAlpha = 1;
+      if (canMe) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { sfxBeep(520, .06); mapClick(v); } });
+      return;
+    }
+    const owner = takenBy(c), isMine = canMe && s.marks[me] === c, canPick = canMe && owner === undefined, hov = canPick && over(x, y, T, TH), rc = !!s.roll && c >= 0 && s.roll.cur === c;
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, T, TH, 10); ctx.clip();
+    ctx.fillStyle = rc ? '#2a2a34' : '#16161d'; ctx.fillRect(x, y, T, TH);
+    if (c >= 0) { const sf = (TH - 16) / 130; ctx.save(); ctx.beginPath(); ctx.rect(x, y, T, TH - 16); ctx.clip(); ctx.translate(x + T / 2, y + (TH - 16) / 2 + 190 * sf); ctx.scale(sf, sf); drawBust(CHARS[c]); ctx.restore(); }
+    else txt('?', x + T / 2, y + (TH - 16) / 2 + 2, T * .55, hov || isMine ? INK : MUTE, 'center');
+    if (owner !== undefined) { ctx.fillStyle = 'rgba(0,0,0,.62)'; ctx.fillRect(x, y, T, TH - 16); }
+    ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(x, y + TH - 16, T, 16);
+    txt(isMine ? 'CONFIRMAR' : c >= 0 ? CHARS[c].name : 'ALEATÓRIO', x + T / 2, y + TH - 8, clamp(T / 9, 7, 10), isMine ? INK : 'rgba(231,228,211,.85)', 'center');
+    ctx.restore();
+    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, T - 1, TH - 1, 10);
+    ctx.strokeStyle = rc ? pcol(s.roll.who) : owner !== undefined ? pcol(owner) : isMine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = rc || isMine || owner !== undefined ? 3 : hov ? 2 : 1; ctx.stroke();
+    if (owner !== undefined) txt(owner === me ? 'VOCÊ' : owner === 'host' ? 'ANF.' : pname(owner).replace('JOGADOR ', 'J'), x + T / 2, y + (TH - 16) / 2, clamp(T / 7, 9, 13), pcol(owner), 'center');
+    let dj = 0; if (s.ph === 'char') for (const id of s.ids) if (id !== me && s.conf[id] === undefined && s.marks[id] === c) { ctx.beginPath(); ctx.arc(x + T - 10 - dj * 11, y + 10, 4.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); dj++; }
+    if (canPick) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { sfxBeep(isMine ? 880 : 620, .06); charClick(c); } });
+  });
   cornerBtn('SAIR', -1, IW, IH, () => setState('menu'));
   ctx.restore();
 }
