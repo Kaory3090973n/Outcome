@@ -11,6 +11,7 @@
   html, body { margin: 0; height: 100%; background: #0d0a14; overflow: hidden; overscroll-behavior: none; }
   canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 <canvas id="game"></canvas>
@@ -112,6 +113,7 @@ const MODES = ['CLÁSSICO', 'INFINITO'], PTS = [3, 5, 7, 10, 15], TIMES = [30, 6
 const LOOTS = [{ name: 'POUCA', init: 3, cap: 4, every: 14 }, { name: 'MÉDIA', init: 5, cap: 7, every: 9 }, { name: 'ALTA', init: 9, cap: 12, every: 5 }];   // loot: armas iniciais, máximo no mapa e intervalo de novas armas (s)
 let state = 'intro', cfg = { bots: 4, diff: 1, char: 0, mode: 0, pts: 1, time: 2, loot: 1, musicVol: 7, sfxVol: 8, music: 0 }, training = false, chIdx = 0, trainT = 0;
 let M = null, introT = 0;
+const NET = { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', err: '', busy: false, snap: null, others: null, cap: 8, copied: false }; let JOIN = '';   // estado do modo online
 /* Teclas personalizáveis (tela OPÇÕES). As setas continuam movendo o personagem como alternativa. */
 const KEYDEFS = [['up', 'MOVER PARA CIMA', 'KeyW'], ['down', 'MOVER PARA BAIXO', 'KeyS'], ['left', 'MOVER PARA ESQUERDA', 'KeyA'], ['right', 'MOVER PARA DIREITA', 'KeyD'],
   ['interact', 'PEGAR ARMA', 'KeyE'], ['reload', 'RECARREGAR', 'KeyR'], ['cover', 'COBERTURA', 'KeyQ'], ['throw', 'ARREMESSAR ARMA', 'KeyG'], ['hit', 'MOSTRAR HITBOX', 'KeyH']];
@@ -274,6 +276,9 @@ try { Object.assign(cfg, JSON.parse(localStorage.getItem('oc_cfg') || '{}')); } 
 cfg.bots = clamp(+cfg.bots || 4, 1, 8); cfg.diff = clamp(+cfg.diff || 0, 0, 2); cfg.mode = cfg.mode ? 1 : 0;
 cfg.pts = clamp(+cfg.pts || 0, 0, PTS.length - 1); cfg.time = clamp(+cfg.time || 0, 0, TIMES.length - 1); cfg.loot = clamp(+cfg.loot || 0, 0, LOOTS.length - 1);
 cfg.musicVol = clamp(isFinite(cfg.musicVol) ? Math.round(cfg.musicVol) : 7, 0, 10); cfg.sfxVol = clamp(isFinite(cfg.sfxVol) ? Math.round(cfg.sfxVol) : 8, 0, 10); cfg.music = clamp(isFinite(cfg.music) ? Math.round(cfg.music) : 0, 0, 5); cfg.char = clamp(cfg.char, 0, 7); cfg.map = clamp(isFinite(cfg.map) ? Math.round(cfg.map) : 3, 0, 3);   // map: 0-2 = mapa fixo, 3 = aleatório
+cfg.team = clamp(+cfg.team || 0, 0, 4);   // 0 = sala personalizada (todos contra todos); 1..4 = 1v1..4v4 (times)
+const nBots = () => cfg.team > 0 ? cfg.team * 2 - 1 : cfg.bots;   // 1v1: 1 bot | 2v2: 3 bots | 3v3: 5 | 4v4: 7
+let soloSetup = false;   // true = a tela de configuração é a do SOLITÁRIO (só mapa e armas)
 const saveCfg = () => { try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {} };
 let ZOOM = 1.4;              // zoom do mapa/personagens (no celular se adapta à altura da tela)
 const TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
@@ -319,8 +324,13 @@ addEventListener('keydown', e => {
   if (e.code === KEYS.cover) input.coverReq = true;
   if (e.code === KEYS.throw) input.throwReq = true;
   if (state === 'intro') { introClick(); return; }
+  if (state === 'room' || state === 'join') {   // sala online / digitar código
+    if (e.code === 'Escape') { if (state === 'room') leaveRoom(); else { netReset(); setState('modes'); } return; }
+    if (state === 'join') { const d = /^(Digit|Numpad)\d$/.test(e.code) ? e.code.slice(-1) : ''; if (d) addDigit(d); else if (e.code === 'Backspace') JOIN = JOIN.slice(0, -1); else if (e.code === 'Enter' || e.code === 'NumpadEnter') doJoin(); }
+    return;
+  }
   if (e.code === 'Escape') { if (state === 'play') setState('pause'); else if (state === 'pause') setState('play'); else if (state === 'options') setState(optBack); else if (state !== 'menu') setState('menu'); }   // Esc: pausa / continua / volta
-  if (e.code === 'Enter') { if (state === 'menu') setState('maps'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup' || state === 'mend') startMatch(); else if (state === 'dead') startGame(training); }
+  if (e.code === 'Enter') { if (state === 'menu') setState('modes'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup') startSetup(); else if (state === 'mend') startMatch(); else if (state === 'dead') startGame(training); }
   if (state === 'log') { if (e.code === 'ArrowDown' || e.code === 'PageDown') logScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') logScroll -= 70; }
   if (state === 'info' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) infoIdx = (infoIdx + (e.code === 'ArrowRight' ? 1 : WKEYS.length - 1)) % WKEYS.length;
   if (state === 'maps' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { const n = MAPS.length + 1; cfg.map = (cfg.map + (e.code === 'ArrowRight' ? 1 : n - 1)) % n; saveCfg(); }
@@ -488,31 +498,36 @@ const holdX = w => C.holdReach - w.gripR[0];   // x (local) da origem da arma: a
 const toWorld = (f, lx, ly) => { const c = Math.cos(f.angle), s = Math.sin(f.angle); return { x: f.x + lx*c - ly*s, y: f.y + lx*s + ly*c }; };
 
 function spawnBot(b) {
-  const d = DIFFS[cfg.diff], p = freeSpot(380, player);
+  const d = DIFFS[cfg.diff]; let p = null;
+  if (b.team === player.team) for (let i = 0; i < 60 && !p; i++) {   // aliado nasce perto do jogador
+    const a = rnd(0, TAU), r = rnd(50, 140), x = player.x + Math.cos(a) * r, y = player.y + Math.sin(a) * r;
+    if (x > 50 && y > 50 && x < WW - 50 && y < WH - 50 && !inCrate(x, y, 30)) p = { x, y };
+  }
+  if (!p) p = freeSpot(380, player);
   Object.assign(b, makeFighter({ x: p.x, y: p.y, hp: d.hp, maxHp: d.hp, speed: d.speed * rnd(.92, 1.08), punchDmg: 10,
     pal: b.pal, respawnT: 0, strafe: Math.random() < .5 ? 1 : -1,
     strafeT: rnd(1, 3), burstT: rnd(.3, 1), burstOn: false, aimBias: 0, biasT: 0, stuckT: 0, detourT: 0, angle: rnd(0, TAU), tgt: null, tgtT: 0 }));
 }
 
 function updateCam() {   // câmera presa ao personagem (para só nas bordas do mapa); eliminado = acompanha um bot vivo
-  let t = player; if (player.dead) { const a = bots.find(b => !b.dead); if (a) t = a; }
+  let t = player; if (player.dead) { const a = bots.find(b => !b.dead && b.team === player.team) || bots.find(b => !b.dead); if (a) t = a; }
   const tx = clamp(t.x - VW / 2, 0, Math.max(0, WW - VW)), ty = clamp(t.y - VH / 2, 0, Math.max(0, WH - VH));
   if (player.dead) { cam.x += (tx - cam.x) * .08; cam.y += (ty - cam.y) * .08; } else { cam.x = tx; cam.y = ty; }
 }
 function startGame(tr, keepKills) {
-  training = tr === true; trainT = 0; if (training) { curMap = null; buildCrates(); }
+  training = tr === true; trainT = 0; if (training) { curMap = MAPS[cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map]; buildCrates(); }   // solitário: mapa escolhido (ALEATÓRIO sorteia)
   if (training) { M = null; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); }
   decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; if (!keepKills) kills = 0; dmgFlash = 0;
   const c = freeSpot();
   const sp = curMap ? curMap.spawn : [.5, .4];
   player = makeFighter({ x: WW * sp[0], y: WH * sp[1], isPlayer: true, pid: 0,
-    pal: CHARS[cfg.char] });
+    pal: CHARS[cfg.char], team: 0 });
   if (inCrate(player.x, player.y, 30)) Object.assign(player, freeSpot());
   bots = [];
-  const pool = CHARS.map((_, i) => i).filter(i => i !== cfg.char);   // bots usam os outros personagens
-  for (let i = 0; !training && i < cfg.bots; i++) { const b = { pal: CHARS[pool[i % pool.length]], pid: i + 1 }; spawnBot(b); bots.push(b); }
-  if (training) WKEYS.forEach(k => { const p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); });
-  else {   // quantidade de loot escolhida na configuração (pouca / média / alta)
+  const pool = [...new Set([...(NET.others || []), ...CHARS.map((_, i) => i)])].filter(i => i !== cfg.char);   // bots usam os outros personagens
+  const tm = !training && M && M.team;   // partida por times: os primeiros (n-1) bots são aliados do jogador
+  for (let i = 0; !training && i < nBots(); i++) { const b = { pal: CHARS[pool[i % pool.length]], pid: i + 1, team: tm ? (i < M.room - 1 ? 0 : 1) : i + 1 }; spawnBot(b); bots.push(b); }
+  {   // quantidade de loot escolhida na configuração (pouca / média / alta), também no solitário
     const L = LOOTS[cfg.loot], ks = WKEYS.slice().sort(() => Math.random() - .5);
     for (let i = 0; i < L.init; i++) { const k = ks[i % ks.length], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); }
     pickupTimer = L.every;
@@ -521,23 +536,29 @@ function startGame(tr, keepKills) {
 }
 /* ------------------------------ PARTIDA ------------------------------- */
 function startMatch() {
+  soloSetup = false;
   try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {}
   const mi = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map; curMap = MAPS[mi]; buildCrates();   // ALEATÓRIO sorteia a cada partida
-  M = { round: 0, map: mi, sc: new Array(cfg.bots + 1).fill(0), target: cfg.mode === 0 ? PTS[cfg.pts] : 0, time: TIMES[cfg.time], phase: 'count', phaseT: 0, left: 0, flashT: 0, last: null };
+  const pre = cfg.team > 0;   // predefinido (1v1..4v4): clássico, 3 minutos, times
+  M = { round: 0, map: mi, room: cfg.team, team: pre, sc: new Array(pre ? 2 : nBots() + 1).fill(0), target: (pre || cfg.mode === 0) ? PTS[cfg.pts] : 0, time: pre ? 180 : TIMES[cfg.time], phase: 'count', phaseT: 0, left: 0, flashT: 0, last: null };
   kills = 0; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); nextRound();
 }
 function nextRound() { M.round++; startGame(false, true); M.phase = M.round === 1 ? 'map' : 'count'; M.mapSfx = false; M.phaseT = 0; M.left = M.time; M.flashT = 0; M.last = null; M.beep = -1; }
 const fname = f => f.pal.name + (f.isPlayer ? ' (VOCÊ)' : '');
 function endRound(alive) {
-  let w = null, why = '';
-  if (alive.length === 1) { w = alive[0]; why = 'ÚLTIMO EM PÉ'; }
-  else if (!alive.length) why = 'TODOS CAÍRAM';
-  else {   // tempo esgotado: vence quem tiver mais vida
+  let w = null, why = '', wt = -1;
+  const ts = [...new Set(alive.map(f => f.team))];
+  if (ts.length === 1) { wt = ts[0]; w = alive.find(f => f.team === wt); why = M.team ? 'ÚLTIMO TIME EM PÉ' : 'ÚLTIMO EM PÉ'; }
+  else if (!ts.length) why = 'TODOS CAÍRAM';
+  else if (M.team) {   // tempo esgotado: vence o time com mais vida somada
+    const hp = t => alive.filter(f => f.team === t).reduce((a, f) => a + f.hp, 0), a = hp(0), b = hp(1);
+    if (Math.abs(a - b) > .01) { wt = a > b ? 0 : 1; w = alive.find(f => f.team === wt); why = 'TEMPO ESGOTADO: MAIOR VIDA DO TIME'; } else why = 'TEMPO ESGOTADO: VIDA IGUAL';
+  } else {   // tempo esgotado: vence quem tiver mais vida
     alive.sort((a, b) => b.hp - a.hp);
-    if (alive[0].hp - alive[1].hp > .01) { w = alive[0]; why = 'TEMPO ESGOTADO: MAIOR VIDA'; } else why = 'TEMPO ESGOTADO: VIDA IGUAL';
+    if (alive[0].hp - alive[1].hp > .01) { w = alive[0]; wt = w.team; why = 'TEMPO ESGOTADO: MAIOR VIDA'; } else why = 'TEMPO ESGOTADO: VIDA IGUAL';
   }
-  if (w) M.sc[w.pid]++;
-  M.last = { w, why }; M.phase = 'rend'; M.phaseT = 0;
+  if (wt >= 0) M.sc[wt]++;
+  M.last = { w, wt, why }; M.phase = 'rend'; M.phaseT = 0;
 }
 const MAP_INTRO = 2.8;   // duração (s) da apresentação do nome do mapa
 function stepMatch(dt) {   // devolve o dt da simulação (-1 = congelada)
@@ -554,7 +575,7 @@ function stepMatch(dt) {   // devolve o dt da simulação (-1 = congelada)
   }
   if (M.phase === 'fight') {
     M.left -= dt; const alive = [player, ...bots].filter(f => !f.dead);
-    if (alive.length <= 1 || M.left <= 0) { M.left = Math.max(0, M.left); endRound(alive); }
+    if (new Set(alive.map(f => f.team)).size <= 1 || M.left <= 0) { M.left = Math.max(0, M.left); endRound(alive); }
     return dt;
   }
   if (M.phase === 'rend') {
@@ -563,7 +584,7 @@ function stepMatch(dt) {   // devolve o dt da simulação (-1 = congelada)
   }
   return -1;
 }
-function setState(s) { state = s; if (s === 'menu' || s === 'setup' || s === 'maps') M = null; canvas.style.cursor = s === 'play' ? 'none' : 'default'; input.down = false; input.peek = false; resetTouch(); }
+function setState(s) { state = s; if (s === 'menu') netReset(); if (s === 'room' || s === 'join' || s === 'menu' || s === 'setup' || s === 'maps' || s === 'modes' || s === 'train') M = null; canvas.style.cursor = s === 'play' ? 'none' : 'default'; input.down = false; input.peek = false; resetTouch(); }
 
 /* ------------------------------ COMBATE ------------------------------- */
 function tryPunch(f) {
@@ -599,7 +620,7 @@ function swingRot(f) {
   if (t < .5) return -1.4 + 2.6 * easeOutExpo((t - .18) / .32);
   return 1.2 + (rest - 1.2) * easeInOut((t - .5) / .5);
 }
-const enemiesOf = f => [player, ...bots].filter(o => o !== f && !o.dead);   // todos contra todos
+const enemiesOf = f => [player, ...bots].filter(o => o !== f && !o.dead && o.team !== f.team);   // inimigos (aliados não levam dano)
 
 function damage(t, dmg, ang, src) {
   if (t.dead) return;
@@ -680,7 +701,7 @@ function updateThrown(dt) {
       t.x = nx; t.y = ny;
       if (Math.hypot(t.vx, t.vy) > C.throwMinHit)
         for (const f of [player, ...bots])
-          if (!f.dead && f !== t.owner && !t.hits.has(f) && Math.hypot(f.x - t.x, f.y - t.y) < f.r + 7) { hitByThrown(t, f); break; }
+          if (!f.dead && f !== t.owner && f.team !== t.owner.team && !t.hits.has(f) && Math.hypot(f.x - t.x, f.y - t.y) < f.r + 7) { hitByThrown(t, f); break; }
     }
     const sp = Math.hypot(t.vx, t.vy), k = Math.exp(-C.throwDrag * dt);
     t.vx *= k; t.vy *= k; t.rot += t.spin * dt * Math.min(sp / 300, 1);
@@ -803,7 +824,7 @@ function botIntent(b, dt) {
   b.tgtT -= dt;
   if (b.tgtT <= 0 || !b.tgt || b.tgt.dead) {   // escolhe o lutador vivo mais próximo (jogador ou outro bot)
     b.tgtT = rnd(.8, 1.6); b.tgt = null; let bd = 1e9;
-    for (const o of [player, ...bots]) if (o !== b && !o.dead) { const q = Math.hypot(o.x - b.x, o.y - b.y); if (q < bd) { bd = q; b.tgt = o; } }
+    for (const o of [player, ...bots]) if (o !== b && !o.dead && o.team !== b.team) { const q = Math.hypot(o.x - b.x, o.y - b.y); if (q < bd) { bd = q; b.tgt = o; } }
   }
   const none = !b.tgt, p = b.tgt || b, dx = p.x - b.x, dy = p.y - b.y, dist = Math.hypot(dx, dy) || 1;
   const it = { mx: 0, my: 0, aim: b.angle, fire: false, punch: false, reload: false };
@@ -857,7 +878,7 @@ function updateBullets(dt) {
         break;
       }
       for (const f of [player, ...bots])
-        if (!f.dead && f !== b.owner && Math.hypot(f.x - b.x, f.y - b.y) < hitR(f) && !(f.cover && f.peekK < .5 && b.vx * f.cover.nx + b.vy * f.cover.ny > 0)) {   // protegido de tiros vindos do outro lado da parede
+        if (!f.dead && f !== b.owner && f.team !== b.owner.team && Math.hypot(f.x - b.x, f.y - b.y) < hitR(f) && !(f.cover && f.peekK < .5 && b.vx * f.cover.nx + b.vy * f.cover.ny > 0)) {   // protegido de tiros vindos do outro lado da parede
           damage(f, b.dmg * (b.owner.isPlayer ? 1 : DIFFS[cfg.diff].dmg), Math.atan2(b.vy, b.vx), b.owner);
           b.life = 0; break;
         }
@@ -928,14 +949,12 @@ function updatePlay(dt) {
     updateFighter(b, dt, b.stun > 0 ? {} : botIntent(b, dt));
   }
   updateBullets(dt); updateThrown(dt);
-  if (training) {   // treino: munição infinita e as 5 armas sempre disponíveis no mapa
+  if (training) {   // solitário: munição infinita
     const pw = player.weapon && WEAPONS[player.weapon]; if (pw && !pw.melee && player.reserve < pw.reserve) player.reserve = pw.reserve;
-    trainT -= dt;
-    if (trainT <= 0) { trainT = 2; for (const k of WKEYS) if (player.weapon !== k && !pickups.some(q => q.key === k) && !thrown.some(q => q.key === k)) { const q = freeSpot(), w = WEAPONS[k]; pickups.push({ x: q.x, y: q.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
   }
 
   pickupTimer -= dt;
-  if (pickupTimer <= 0 && !training) { pickupTimer = LOOTS[cfg.loot].every; if (pickups.length < LOOTS[cfg.loot].cap) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
+  if (pickupTimer <= 0) { pickupTimer = LOOTS[cfg.loot].every; if (pickups.length < LOOTS[cfg.loot].cap) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
 
   shake = Math.max(0, shake - dt * 40); dmgFlash = Math.max(0, dmgFlash - dt);
   for (const t of trail) t.life -= dt * 9; trail = trail.filter(t => t.life > 0);
@@ -1397,7 +1416,7 @@ function drawHUD(t) {
   const pct = player.hp / player.maxHp;
   ctx.fillStyle = pct > .5 ? '#4cf08a' : pct > .25 ? '#ffd23f' : '#ff3b5c'; ctx.fillRect(20, 20, 224 * pct, 14);
   txt(`HP ${Math.ceil(player.hp)}`, 24, 27, 13, '#fff', 'left');
-  if (training) { txt('MODO TREINAMENTO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita  ·  armas reaparecem', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
+  if (training) { txt('MODO SOLITÁRIO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
   else { txt(`ABATES ${kills}`, 18, 56, 18, '#e7e4d3', 'left'); txt(`BOTS VIVOS ${bots.filter(b => !b.dead).length}/${bots.length}`, 18, 80, 14, 'rgba(255,255,255,.6)', 'left'); }
 
   // Arma selecionada (estilo Kusan): bala, munição, nome e silhueta (proporção das capturas do jogo)
@@ -1437,7 +1456,7 @@ function drawHUD(t) {
     txt('EM COBERTURA', W / 2, H - 120, 18, '#8fd6a4', 'center');
     txt(player.coverBlock ? 'Sem ângulo: chegue mais perto da quina' : player.peekK > .5 ? 'EXPOSTO: tiro 100% preciso, mas você leva dano normal' : `Clique: tiro cego  ·  Botão dir.: espiar  ·  ${keyName(KEYS.cover)} ou afastar: sai`, W / 2, H - 98, 12, player.coverBlock ? '#ff6b6b' : player.peekK > .5 ? '#ffd23f' : 'rgba(255,255,255,.6)', 'center');
   } else if (!player.dead && player.stun <= 0 && nearestWall(player, 12)) txt(`[${keyName(KEYS.cover)}] COBERTURA`, (player.x - cam.x) * ZOOM, (player.y - cam.y) * ZOOM - 46, 12, '#8fd6a4', 'center');
-  for (const b of bots) if (!b.dead) {   // setas nas bordas apontando para bots fora da tela
+  for (const b of bots) if (!b.dead && b.team !== player.team) {   // setas nas bordas apontando para bots fora da tela
     const sx = (b.x - cam.x) * ZOOM, sy = (b.y - cam.y) * ZOOM; if (sx > 0 && sx < W && sy > 0 && sy < H) continue;
     ctx.save(); ctx.translate(clamp(sx, 24, W - 24), clamp(sy, 24, H - 24)); ctx.rotate(Math.atan2(sy - H / 2, sx - W / 2)); ctx.fillStyle = 'rgba(255,59,92,.8)';
     ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-7, -7); ctx.lineTo(-7, 7); ctx.closePath(); ctx.fill(); ctx.restore();
@@ -1480,8 +1499,8 @@ function drawMenu(t) {
   try { ctx.letterSpacing = '0px'; } catch (e) {}
   let y = y0 + ts + 48;
   // botões largos (JOGAR, TREINAMENTO) e pares lado a lado, todos alinhados
-  button('JOGAR', bx, y, BW, 56, () => setState('maps'), 'primary');
-  button('TREINAMENTO', bx, y + 68, BW, 48, () => startGame(true));
+  button('JOGAR', bx, y, BW, 56, () => setState('modes'), 'primary');
+  button('TREINAMENTO', bx, y + 68, BW, 48, () => setState('train'));
   button('ARMAS', bx, y + 128, HW, 48, () => { infoIdx = 0; setState('info'); });
   button('PERSONAGENS', bx + HW + 8, y + 128, HW, 48, () => { chIdx = cfg.char; setState('chars'); });
   button('ATUALIZAÇÃO', bx, y + 188, HW, 48, () => { logScroll = 0; setState('log'); });
@@ -1491,37 +1510,143 @@ function drawMenu(t) {
 }
 
 /* --------------------------- CONFIGURAR PARTIDA ------------------------- */
-function drawSetup(t) {
+/* ------------- CONFIGURAÇÃO DOS MODOS PREDEFINIDOS (1v1..4v4) ----------- */
+function chevBtn(x, y, s, dir, fn, k) {   // botão quadrado arredondado com seta < ou >
+  const hov = input.mx > x * k && input.mx < (x + s) * k && input.my > y * k && input.my < (y + s) * k;
+  ctx.beginPath(); ctx.roundRect(x + .5, y + .5, s - 1, s - 1, Math.min(14, s * .28)); ctx.fillStyle = hov ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,0)'; ctx.fill();
+  ctx.strokeStyle = hov ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.28)'; ctx.lineWidth = 1; ctx.stroke();
+  const mx = x + s / 2, my = y + s / 2, a = s * .11;
+  ctx.strokeStyle = '#e7e4d3'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(mx - dir * a, my - a * 1.5); ctx.lineTo(mx + dir * a, my); ctx.lineTo(mx - dir * a, my + a * 1.5); ctx.stroke();
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+  ui.push({ x: x * k, y: y * k, w: s * k, h: s * k, fn });
+}
+function drawSetupPre() {
+  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', solo = soloSetup, n = cfg.team, pre = n > 0 && !solo, N = MAPS.length + 1;
+  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.save(); ctx.scale(ms, ms);
+  const k = ctx.getTransform().a / (devicePixelRatio || 1), cyc = (v, m, d) => (v + d + m) % m;
+  const wide = IW >= 900, tot = Math.min(IW - 40, 1080), pw = wide ? Math.round(tot * .54) : tot, rcw = wide ? tot - pw - 40 : tot;
+  const cyc2 = cyc, fmt = sec => sec >= 60 ? (sec / 60) + ' MIN' + (sec % 60 ? ' ' + sec % 60 + 'S' : '') : sec + ' S';
+  const diffR = ['DIFICULDADE', DIFFS[cfg.diff].name, () => cfg.diff = Math.max(0, cfg.diff - 1), () => cfg.diff = Math.min(2, cfg.diff + 1)];
+  const lootR = ['ARMAS', LOOTS[cfg.loot].name, () => cfg.loot = cyc2(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, 1)];
+  const rows = solo ? [lootR] : pre ? [   // solitário: só armas | predefinido: pontos, armas e dificuldade (o mapa fica no painel)
+    ['PONTOS', String(PTS[cfg.pts]), () => cfg.pts = cyc2(cfg.pts, PTS.length, -1), () => cfg.pts = cyc2(cfg.pts, PTS.length, 1)],
+    lootR, diffR,
+  ] : [   // sala personalizada: tudo liberado
+    ['MODO', MODES[cfg.mode], () => cfg.mode = cyc2(cfg.mode, 2, -1), () => cfg.mode = cyc2(cfg.mode, 2, 1)],
+    ['PONTOS', cfg.mode ? '∞' : String(PTS[cfg.pts]), cfg.mode ? null : () => cfg.pts = cyc2(cfg.pts, PTS.length, -1), cfg.mode ? null : () => cfg.pts = cyc2(cfg.pts, PTS.length, 1)],
+    diffR,
+    ['BOTS', String(cfg.bots), () => cfg.bots = Math.max(1, cfg.bots - 1), () => cfg.bots = Math.min(8, cfg.bots + 1)],
+    ['TEMPO', fmt(TIMES[cfg.time]), () => cfg.time = cyc2(cfg.time, TIMES.length, -1), () => cfg.time = cyc2(cfg.time, TIMES.length, 1)],
+    lootR,
+  ];
+  const R = rows.length;
+  const f = clamp((pw - 110) / 398, .6, 1), selW = 150 * f, selH = 104 * f, sdW = 108 * f, sdH = 76 * f;
+  const rh = R > 3 ? 44 : 56, rgMin = R > 3 ? 12 : 20, rowsMin = R * rh + (R - 1) * rgMin, ph = Math.max(Math.round(46 + selH + 74), wide ? rowsMin : 0), rg = wide && R > 1 ? (ph - R * rh) / (R - 1) : rgMin, rowsH = wide ? ph : rowsMin;
+  const descH = pre || solo ? 0 : 30;
+  const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + (wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
+  const y0 = Math.max(14, (IH - contH) / 2), px = cx - tot / 2, py = y0 + ts + 34;
+  // título (mesmo estilo das outras telas)
+  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
+  txt(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : 'SALA PERSONALIZADA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
+  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  // painel do mapa (carrossel)
+  ctx.beginPath(); ctx.roundRect(px + .5, py + .5, pw - 1, ph - 1, 16); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
+  const pcx = px + pw / 2;
+  txt('MAPA', pcx, py + 28, 20, INK, 'center');
+  const cyT = py + 46 + (ph - 84 - (selH + 28)) / 2 + selH / 2, sel = cfg.map, pick = i => { cfg.map = i; saveCfg(); };
+  const thumb = (i, x, y, w, h, on) => {
+    const mp = MAPS[i]; ctx.globalAlpha = on ? 1 : .6; drawMapPreview(mp, x, y, w, h);
+    if (!mp) txt('?', x + w / 2, y + h / 2 + 2, h * .6, INK, 'center');
+    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, w - 1, h - 1, 12); ctx.strokeStyle = on ? INK : 'rgba(255,255,255,.25)'; ctx.lineWidth = on ? 2.5 : 1.5; ctx.stroke(); ctx.globalAlpha = 1;
+    txt(mp ? mp.name : 'ALEATÓRIO', x + w / 2, y + h + (on ? 20 : 16), on ? 15 : 12, on ? INK : MUTE, 'center');
+    if (!on) ui.push({ x: x * k, y: y * k, w: w * k, h: (h + 26) * k, fn: () => pick(i) });
+  };
+  const li = cyc(sel, N, -1), ri = cyc(sel, N, 1);
+  thumb(li, pcx - selW / 2 - 16 * f - sdW, cyT - sdH / 2, sdW, sdH, false);
+  thumb(ri, pcx + selW / 2 + 16 * f, cyT - sdH / 2, sdW, sdH, false);
+  thumb(sel, pcx - selW / 2, cyT - selH / 2, selW, selH, true);
+  chevBtn(px + 12, cyT - 20, 40, -1, () => pick(li), k); chevBtn(px + pw - 52, cyT - 20, 40, 1, () => pick(ri), k);
+  { const dy = py + ph - 20, sp = 30, dx0 = pcx - (N - 1) * sp / 2;
+    for (let i = 0; i < N; i++) { const dx = dx0 + i * sp; ctx.beginPath(); ctx.arc(dx, dy, 5.5, 0, TAU); if (i === sel) { ctx.fillStyle = INK; ctx.fill(); } else { ctx.strokeStyle = 'rgba(231,228,211,.7)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      ui.push({ x: (dx - 14) * k, y: (dy - 14) * k, w: 28 * k, h: 28 * k, fn: () => pick(i) }); } }
+  // linhas de opções
+  const rx = wide ? px + pw + 40 : px, ry0 = (wide ? py : py + ph + 28) + (wide && R === 1 ? (ph - rh) / 2 : 0);
+  const lw = 130, va = rx + lw + rh, vb = rx + rcw - rh;
+  rows.forEach(([label, val, prev, next], i) => {
+    const ry = ry0 + i * (rh + rg);
+    txt(label, rx, ry + rh / 2 + 1, 15, INK, 'left');
+    if (prev) chevBtn(rx + lw, ry, rh, -1, prev, k);
+    if (next) chevBtn(rx + rcw - rh, ry, rh, 1, next, k);
+    txt(val, (va + vb) / 2, ry + rh / 2 + 1, 18, prev ? INK : MUTE, 'center');
+  });
+  const by = py + (wide ? ph : ph + 28 + rowsH) + descH + 40;
+  if (!pre && !solo) txt(cfg.mode ? 'Infinito: as rodadas não acabam, só o placar sobe. Esc sai da partida.' : `Clássico: vence a partida quem chegar primeiro a ${PTS[cfg.pts]} pontos (1 ponto por rodada).`, cx, by - 36, 11, '#5c5c68', 'center');
+  button(solo ? 'COMEÇAR' : 'CRIAR SALA', cx - 140, by, 280, 56, startSetup, 'primary');
+  button('VOLTAR', cx - 140, by + 68, 280, 46, () => setState(solo ? 'train' : 'modes'));
+  ctx.restore();
+}
+
+const startSetup = () => { saveCfg(); if (soloSetup) startGame(true); else createRoom(); };
+function drawSetup(t) { drawSetupPre(); }   // predefinidos e sala personalizada usam a mesma tela (muda só a lista de opções)
+
+/* --------------------------- TREINAMENTO: TREINAMENTO | BOTS ------------ */
+function drawTrain(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
   ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.save(); ctx.scale(ms, ms);
-  const cyc = (v, n, d) => (v + d + n) % n, fmt = sec => sec >= 60 ? (sec / 60) + ' MIN' + (sec % 60 ? ' ' + sec % 60 + 'S' : '') : sec + ' S';
-  const rows = [
-    ['MAPA', cfg.map >= MAPS.length ? 'ALEATÓRIO' : MAPS[cfg.map].name, () => cfg.map = cyc(cfg.map, MAPS.length + 1, -1), () => cfg.map = cyc(cfg.map, MAPS.length + 1, 1)],
-    ['MODO', MODES[cfg.mode], () => cfg.mode = cyc(cfg.mode, 2, -1), () => cfg.mode = cyc(cfg.mode, 2, 1)],
-    ['PONTOS', cfg.mode ? '∞' : String(PTS[cfg.pts]), cfg.mode ? null : () => cfg.pts = cyc(cfg.pts, PTS.length, -1), cfg.mode ? null : () => cfg.pts = cyc(cfg.pts, PTS.length, 1)],
-    ['DIFICULDADE', DIFFS[cfg.diff].name, () => cfg.diff = Math.max(0, cfg.diff - 1), () => cfg.diff = Math.min(2, cfg.diff + 1)],
-    ['BOTS', String(cfg.bots), () => cfg.bots = Math.max(1, cfg.bots - 1), () => cfg.bots = Math.min(8, cfg.bots + 1)],
-    ['TEMPO', fmt(TIMES[cfg.time]), () => cfg.time = cyc(cfg.time, TIMES.length, -1), () => cfg.time = cyc(cfg.time, TIMES.length, 1)],
-    ['ARMAS', LOOTS[cfg.loot].name, () => cfg.loot = cyc(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc(cfg.loot, LOOTS.length, 1)],
-  ];
-  const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 520)) / 2);
+  const k = ctx.getTransform().a / (devicePixelRatio || 1), gap = 18;
+  const cw = Math.min(230, (IW - 40 - gap) / 2), ch = Math.min(cw * 1.5, IH - 220), totW = cw * 2 + gap, x0 = cx - totW / 2;
+  const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + 28 + 44)) / 2);
   try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
-  txt('PARTIDA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
+  txt('TREINAMENTO', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
   try { ctx.letterSpacing = '0px'; } catch (e) {}
-  let y = y0 + ts + 28;
-  rows.forEach(([label, val, prev, next]) => {
-    txt(label, cx - 210, y + 21, 14, MUTE, 'left');
-    if (prev) button('<', cx + 10, y, 40, 40, prev);
-    txt(val, cx + 115, y + 21, 15, prev ? INK : MUTE, 'center');
-    if (next) button('>', cx + 180, y, 40, 40, next);
-    y += 50;
+  const y = y0 + ts + 28;
+  [['SOLITÁRIO', () => { soloSetup = true; setState('setup'); }], ['BOTS', () => { soloSetup = false; cfg.team = 0; saveCfg(); setState('setup'); }]].forEach(([label, fn], i) => {   // mesmo estilo dos cartões de mapa
+    const x = x0 + i * (cw + gap), hov = input.mx > x * k && input.mx < (x + cw) * k && input.my > y * k && input.my < (y + ch) * k;
+    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, cw - 1, ch - 1, 16); ctx.fillStyle = hov ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.03)'; ctx.fill();
+    ctx.strokeStyle = hov ? INK : 'rgba(255,255,255,.14)'; ctx.lineWidth = hov ? 2 : 1; ctx.stroke();
+    txt(label, x + cw / 2, y + ch / 2 + 1, clamp(cw / 10, 14, 22), hov ? INK : MUTE, 'center');
+    ui.push({ x: x * k, y: y * k, w: cw * k, h: ch * k, fn });
   });
-  const desc = cfg.mode ? 'Infinito: as rodadas não acabam, só o placar sobe. Esc sai da partida.' : `Clássico: vence a partida quem chegar primeiro a ${PTS[cfg.pts]} pontos (1 ponto por rodada).`;
-  txt(desc, cx, y + 6, 11, '#5c5c68', 'center');
-  y += 28;
-  button('COMEÇAR', cx - 110, y, 220, 52, startMatch, 'primary');
-  button('VOLTAR', cx - 110, y + 64, 220, 44, () => setState('maps'));
+  button('VOLTAR', cx - 110, y + ch + 28, 220, 44, () => setState('menu'));
+  ctx.restore();
+}
+
+/* --------------------------- ESCOLHER MODO (1v1 ... 4v4) ---------------- */
+function drawModes(t) {
+  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
+  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  ctx.save(); ctx.scale(ms, ms);
+  const k = ctx.getTransform().a / (devicePixelRatio || 1), n = 4, gap = 14;
+  const cw = Math.min(150, (IW - 40 - gap * (n - 1)) / n), ch = cw * 1.5, totW = n * cw + (n - 1) * gap, x0 = cx - totW / 2, bh = 64;
+  const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + gap + bh + 62 + 28 + 44)) / 2);
+  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
+  txt('ESCOLHER MODO', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
+  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  const y = y0 + ts + 28;
+  let tip = null;
+  const TIPS = { 0: 'Sala personalizada: todas as opções liberadas (modo, pontos, bots, tempo, armas e dificuldade). Todos contra todos.' };
+  for (let q = 1; q <= 4; q++) TIPS[q] = `Clássico · 3 MIN · ${q > 1 ? `você + ${q - 1} aliado${q > 2 ? 's' : ''}` : 'você'} contra ${q} inimigo${q > 1 ? 's' : ''}`;
+  const card = (label, x, yy, w, h, size, id) => {   // mesmo estilo dos cartões de mapa
+    const sel = false, hov = input.mx > x * k && input.mx < (x + w) * k && input.my > yy * k && input.my < (yy + h) * k;
+    ctx.beginPath(); ctx.roundRect(x + .5, yy + .5, w - 1, h - 1, 16); ctx.fillStyle = sel ? 'rgba(255,255,255,.08)' : hov ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.03)'; ctx.fill();
+    ctx.strokeStyle = sel ? INK : hov ? 'rgba(255,255,255,.4)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
+    txt(label, x + w / 2, yy + h / 2 + 1, size, sel || hov ? INK : MUTE, 'center');
+    if (hov) tip = TIPS[id];
+    ui.push({ x: x * k, y: yy * k, w: w * k, h: h * k, fn: () => { soloSetup = false; cfg.team = id; saveCfg(); setState('setup'); } });
+  };
+  for (let i = 0; i < n; i++) card((i + 1) + 'v' + (i + 1), x0 + i * (cw + gap), y, cw, ch, clamp(cw / 4.2, 14, 30), i + 1);
+  card('SALA PERSONALIZADA', x0, y + ch + gap, totW, bh, clamp(bh * .3, 14, 20), 0);
+  button('ENTRAR COM CÓDIGO', x0, y + ch + gap + bh + gap, totW, 48, () => { netReset(); NET.err = ''; JOIN = ''; setState('join'); });
+  button('VOLTAR', cx - 110, y + ch + gap + bh + 62 + 28, 220, 44, () => setState('menu'));
+  if (tip) {   // balão perto do mouse com a descrição do modo
+    const lines = wrapLines(tip, Math.min(300, IW - 40), 12), bw = Math.min(320, IW - 20), bh2 = lines.length * 18 + 18;
+    const tx = clamp(input.mx / ms + 16, 10, IW - bw - 10), ty = clamp(input.my / ms + 20, 10, IH - bh2 - 10);
+    ctx.beginPath(); ctx.roundRect(tx + .5, ty + .5, bw - 1, bh2 - 1, 10); ctx.fillStyle = 'rgba(13,13,17,.96)'; ctx.fill(); ctx.strokeStyle = 'rgba(231,228,211,.6)'; ctx.lineWidth = 1; ctx.stroke();
+    lines.forEach((l, i) => txt(l, tx + 12, ty + 18 + i * 18, 12, INK, 'left'));
+  }
   ctx.restore();
 }
 
@@ -1559,7 +1684,7 @@ function drawMaps(t) {
   for (const l of wrapLines(desc, Math.min(600, IW - 40), 12)) { txt(l, cx, yy, 12, MUTE, 'center'); yy += 18; }
   yy = Math.max(yy, y + ch + 22 + 54) + 16;
   button('CONTINUAR', cx - 110, yy, 220, 52, () => { saveCfg(); setState('setup'); }, 'primary');
-  button('VOLTAR', cx - 110, yy + 64, 220, 44, () => setState('menu'));
+  button('VOLTAR', cx - 110, yy + 64, 220, 44, () => setState('modes'));
   ctx.restore();
 }
 
@@ -1572,7 +1697,11 @@ function drawMatchHUD() {
   txt(`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`, W / 2, 33, 26, low && Math.floor(t * 4) % 2 ? '#ff5a5a' : INK, 'center');
   txt(`RODADA ${M.round}  ·  ${M.target ? 'META ' + M.target + ' PTS' : 'INFINITO'}`, W / 2, 66, 12, MUTE, 'center');
   const px = W - (TOUCH ? 76 : 20); let py = 22;   // placar
-  for (const f of [player, ...bots]) { txt(`${fname(f)}  ${M.sc[f.pid]}`, px, py, 12, f.dead ? 'rgba(255,255,255,.3)' : f.isPlayer ? INK : MUTE, 'right'); py += 17; }
+  if (M.team) {
+    txt(`SEU TIME  ${M.sc[0]}`, px, py, 13, '#8fd6a4', 'right'); py += 18;
+    txt(`INIMIGOS  ${M.sc[1]}`, px, py, 13, '#ff7a6b', 'right'); py += 22;
+    for (const f of [player, ...bots]) { txt(fname(f), px, py, 11, f.dead ? 'rgba(255,255,255,.3)' : f.team === player.team ? 'rgba(143,214,164,.9)' : 'rgba(255,122,107,.9)', 'right'); py += 15; }
+  } else for (const f of [player, ...bots]) { txt(`${fname(f)}  ${M.sc[f.team]}`, px, py, 12, f.dead ? 'rgba(255,255,255,.3)' : f.isPlayer ? INK : MUTE, 'right'); py += 17; }
   if (player.dead && M.phase === 'fight') txt('ELIMINADO · ESPECTANDO ATÉ A RODADA ACABAR', W / 2, H - 120, 16, '#ff7a6b', 'center');
   if (M.phase === 'map') {   // nome do mapa, antes da contagem
     const mp = MAPS[M.map], T = M.phaseT, a = clamp(T / .35, 0, 1) * clamp((MAP_INTRO - T) / .4, 0, 1), s = easeOutExpo(clamp(T / .8, 0, 1));
@@ -1606,7 +1735,7 @@ function drawMatchHUD() {
   if (M.phase === 'rend' && M.last) {
     ctx.fillStyle = `rgba(0,0,0,${.5 * clamp(M.phaseT * 3, 0, 1)})`; ctx.fillRect(0, 0, W, H);
     const w = M.last.w;
-    txt(w ? `${fname(w)} VENCEU A RODADA` : 'EMPATE NA RODADA', W / 2, H / 2 - 16, clamp(W / 26, 18, 40), INK, 'center');
+    txt(w ? (M.team ? (M.last.wt === 0 ? 'SEU TIME VENCEU A RODADA' : 'TIME INIMIGO VENCEU A RODADA') : `${fname(w)} VENCEU A RODADA`) : 'EMPATE NA RODADA', W / 2, H / 2 - 16, clamp(W / 26, 18, 40), INK, 'center');
     txt(M.last.why, W / 2, H / 2 + 22, 14, MUTE, 'center');
     if (w) txt('+1 PONTO', W / 2, H / 2 + 48, 16, '#8fd6a4', 'center');
   }
@@ -1615,12 +1744,13 @@ function drawMatchEnd() {
   const ms = clamp(innerHeight / 560, .55, 1), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, INK = '#e7e4d3', MUTE = '#8a8a96';
   ctx.fillStyle = 'rgba(8,8,12,.85)'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   ctx.save(); ctx.scale(ms, ms);
-  const order = [player, ...bots].sort((a, b) => M.sc[b.pid] - M.sc[a.pid]), top = order[0];
+  const rows = M.team ? [['SEU TIME', M.sc[0], true], ['INIMIGOS', M.sc[1], false]] : [player, ...bots].map(f => [fname(f), M.sc[f.team], f.isPlayer]);
+  rows.sort((a, b) => b[1] - a[1]); const order = rows, top = rows[0];
   const y0 = Math.max(16, (IH - (130 + order.length * 24 + 170)) / 2);
   txt('PARTIDA ENCERRADA', cx, y0 + 20, 30, INK, 'center');
-  txt(`${fname(top)} VENCEU`, cx, y0 + 62, 18, top.isPlayer ? '#8fd6a4' : '#e08a8a', 'center');
+  txt(M.team ? (top[2] ? 'SEU TIME VENCEU' : 'TIME INIMIGO VENCEU') : `${top[0]} VENCEU`, cx, y0 + 62, 18, top[2] ? '#8fd6a4' : '#e08a8a', 'center');
   let y = y0 + 104;
-  order.forEach((f, i) => { txt(`${i + 1}. ${fname(f)}`, cx - 130, y, 14, f.isPlayer ? INK : MUTE, 'left'); txt(String(M.sc[f.pid]), cx + 130, y, 14, f.isPlayer ? INK : MUTE, 'right'); y += 24; });
+  order.forEach((f, i) => { txt(`${i + 1}. ${f[0]}`, cx - 130, y, 14, f[2] ? INK : MUTE, 'left'); txt(String(f[1]), cx + 130, y, 14, f[2] ? INK : MUTE, 'right'); y += 24; });
   y += 14;
   button('JOGAR DE NOVO', cx - 130, y, 260, 52, startMatch, 'primary');
   button('CONFIGURAR', cx - 130, y + 62, 260, 44, () => setState('setup'));
@@ -1975,6 +2105,72 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 32, v: '0.22.0', title: 'Modo SOLITÁRIO',
+    criado: [
+      'Modo SOLITÁRIO: você joga sozinho, sem bots e com munição infinita, no mapa que escolher.',
+      'Tela de configuração do SOLITÁRIO no mesmo estilo dos modos predefinidos, com só duas opções: MAPA (carrossel, incluindo ALEATÓRIO) e ARMAS (pouca, média ou alta), mais os botões COMEÇAR e VOLTAR.',
+    ],
+    modificado: [
+      'Na tela TREINAMENTO, o cartão TREINAMENTO foi substituído por SOLITÁRIO.',
+      'A quantidade de armas segue a opção ARMAS: algumas no início e novas aparecendo com o tempo, igual às partidas normais. JOGAR DE NOVO reinicia no mesmo mapa (ou sorteia outro, se estiver em ALEATÓRIO).',
+      'O texto no canto da tela agora diz MODO SOLITÁRIO.',
+    ],
+    removido: [
+      'O treino antigo, com o mapa fixo e as 5 armas sempre disponíveis no chão.',
+    ] },
+  { n: 31, v: '0.21.2', title: 'Sala personalizada com carrossel de mapa',
+    modificado: [
+      'A SALA PERSONALIZADA agora usa o mesmo painel MAPA em carrossel dos modos predefinidos (miniaturas, setas e bolinhas).',
+      'As opções MODO, PONTOS, DIFICULDADE, BOTS, TEMPO e ARMAS ficam à direita, com botões quadrados arredondados com seta. No modo infinito, PONTOS mostra ∞ e fica sem setas.',
+      'A linha de explicação do modo (clássico ou infinito) continua só na sala personalizada, embaixo das opções.',
+    ] },
+  { n: 30, v: '0.21.1', title: 'Bordas arredondadas nas telas de modo',
+    modificado: [
+      'A tela dos modos predefinidos perdeu os traços decorativos e passou a usar só retângulos e quadrados de cantos arredondados, no padrão dos cartões e botões do jogo.',
+      'O painel MAPA agora é um retângulo arredondado com o mesmo fundo e a mesma borda fina dos cartões de mapa, e o título ficou simples, como nas outras telas.',
+    ],
+    removido: [
+      'Moldura com cantos ornamentados e linhas com losango ao redor do título e do painel MAPA.',
+    ] },
+  { n: 29, v: '0.21.0', title: 'Tela de partida predefinida e descrição dos modos',
+    criado: [
+      'Nova tela de partida predefinida (PARTIDA 1v1 a 4v4): painel MAPA com carrossel de miniaturas (a escolhida maior, as vizinhas apagadas, setas, bolinhas e a opção ALEATÓRIO) e, ao lado, as opções PONTOS, ARMAS e DIFICULDADE.',
+      'Balão de descrição perto do mouse ao passar por qualquer modo na tela ESCOLHER MODO: nos predefinidos mostra clássico, 3 minutos e quem joga contra quem; na sala personalizada explica que todas as opções ficam liberadas.',
+      'Em telas estreitas (celular em pé), o painel do mapa fica em cima e as opções embaixo.',
+    ],
+    removido: [
+      'A linha de texto "Clássico · 3 MIN · você contra 1 inimigo..." da tela de partida predefinida (a informação foi para o balão).',
+    ] },
+  { n: 28, v: '0.20.0', title: 'Partidas por times: 1v1, 2v2, 3v3 e 4v4',
+    criado: [
+      'Modos predefinidos 1v1, 2v2, 3v3 e 4v4 com times e bots aliados: 1v1 é você + 1 bot inimigo, 2v2 é você + 3 bots (1 aliado e 2 inimigos), 3v3 é você + 5 bots e 4v4 é você + 7 bots.',
+      'Configuração fixa nos predefinidos: modo clássico e 3 minutos por rodada. A tela de configuração mostra só MAPA, PONTOS, ARMAS e DIFICULDADE.',
+      'Aliados nascem perto de você e lutam contra os inimigos. Não existe fogo amigo: tiros, socos e armas arremessadas não atingem o próprio time.',
+      'Anel no chão: verde para o seu time e vermelho para os inimigos. As setas das bordas apontam só para inimigos.',
+      'Placar por time (SEU TIME x INIMIGOS) no HUD e na tela de partida encerrada. A rodada acaba quando só um time sobra; no tempo esgotado vence o time com mais vida somada.',
+    ],
+    modificado: [
+      'O mapa agora é escolhido dentro da própria tela de configuração, tanto nos predefinidos quanto na SALA PERSONALIZADA.',
+      'A SALA PERSONALIZADA mantém todas as opções (modo, pontos, dificuldade, bots, tempo, armas) e continua todos contra todos.',
+      'O fluxo do JOGAR ficou: escolha do modo, configuração e início da partida. O botão BOTS da tela de treinamento abre a sala personalizada.',
+    ],
+    removido: [
+      'A tela separada ESCOLHER MAPA saiu do fluxo do JOGAR.',
+    ] },
+  { n: 27, v: '0.19.0', title: 'Tela de treinamento com dois cartões',
+    criado: [
+      'O botão TREINAMENTO do lobby agora abre uma tela com dois retângulos grandes em pé, lado a lado, no estilo dos cartões de mapa: TREINAMENTO e BOTS.',
+    ],
+    modificado: [
+      'O cartão TREINAMENTO começa o treino que já existia, e o cartão BOTS segue para a configuração de partida contra bots.',
+    ] },
+  { n: 26, v: '0.18.0', title: 'Tela ESCOLHER MODO',
+    criado: [
+      'Nova tela ESCOLHER MODO ao clicar em JOGAR: quatro retângulos em pé e alinhados (1v1, 2v2, 3v3 e 4v4) e, embaixo, um retângulo deitado de uma ponta à outra com o texto SALA PERSONALIZADA, tudo com bordas arredondadas no padrão do jogo.',
+    ],
+    modificado: [
+      'O botão JOGAR agora abre a escolha de modo antes do restante do fluxo. O VOLTAR volta para o menu e o Enter também avança.',
+    ] },
   { n: 25, v: '0.17.0', title: 'Som de tiro próprio para cada arma',
     criado: [
       'Cada arma agora tem o seu próprio som de tiro, gerado pelo jogo: COLT PYTHON .357 (estrondo grave e longo, com eco), LUGER P08 (estalo fino e seco), GLOCK 19 (estalo curto e agudo, o mais discreto), COLT M1911 .45 (pancada média e pesada) e DESERT EAGLE .50 (som enorme, com sub-grave profundo e cauda longa).',
@@ -2317,14 +2513,136 @@ function drawDead() {
   button('MENU', cx - 130, cy + 70, 260, 44, () => setState('menu'), '#00e5ff');
 }
 
+/* ------------------------------ ONLINE (WebRTC via PeerJS) ------------------ */
+/* Sala de 4 dígitos: o anfitrião registra o ID "outcome-game-XXXX" e os outros se conectam a ele. Funciona no GitHub Pages (sem servidor próprio). */
+const PFX = 'outcome-game-';
+function netReset() { try { if (NET.peer) NET.peer.destroy(); } catch (e) {} Object.assign(NET, { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', busy: false, snap: null, others: null, copied: false }); }
+const netSend = (c, m) => { try { if (c && c.open) c.send(m); } catch (e) {} };
+const netAll = m => { for (const id in NET.conns) netSend(NET.conns[id], m); };
+const roomSync = () => netAll({ t: 'room', players: NET.players, snap: NET.snap });
+function netAbort(err) { netReset(); NET.err = err; setState('join'); }
+function leaveRoom() { const h = NET.host; netReset(); setState(h ? 'setup' : 'modes'); }
+function createRoom() {
+  netReset(); Object.assign(NET, { host: true, err: '', msg: 'CRIANDO SALA...', busy: true, me: 'host', cap: cfg.team > 0 ? cfg.team * 2 : 8,
+    snap: { team: cfg.team, mode: cfg.mode, pts: cfg.pts, time: cfg.time, loot: cfg.loot, diff: cfg.diff, bots: cfg.bots }, players: [{ id: 'host', char: cfg.char, ready: false }] });
+  setState('room');
+  if (typeof Peer === 'undefined') { NET.err = 'SEM CONEXÃO COM O SERVIDOR ONLINE'; NET.busy = false; return; }
+  openRoom(0);
+}
+function openRoom(tries) {
+  const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); let p;
+  try { p = new Peer(PFX + code); } catch (e) { NET.err = 'FALHA AO CRIAR A SALA'; NET.busy = false; return; }
+  NET.peer = p;
+  p.on('open', () => { if (NET.peer !== p) return; NET.code = code; NET.busy = false; NET.msg = ''; });
+  p.on('error', e => { if (NET.peer !== p) return; if (e.type === 'unavailable-id' && tries < 8) { try { p.destroy(); } catch (x) {} openRoom(tries + 1); } else { NET.err = 'ERRO DE CONEXÃO (' + e.type + ')'; NET.busy = false; } });
+  p.on('connection', c => { c.on('data', m => hostRecv(c, m)); c.on('close', () => hostDrop(c.peer)); });
+}
+function hostRecv(c, m) {
+  if (!m || typeof m !== 'object') return; const id = c.peer;
+  if (m.t === 'hello') {
+    if (NET.players.length >= NET.cap && !NET.players.some(p => p.id === id)) { netSend(c, { t: 'full' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); return; }
+    NET.conns[id] = c; if (!NET.players.some(p => p.id === id)) NET.players.push({ id, char: clamp(+m.char | 0, 0, CHARS.length - 1), ready: false });
+    roomSync();
+  } else if (m.t === 'ready') { const p = NET.players.find(q => q.id === id); if (p) { p.ready = !!m.v; roomSync(); } }
+}
+function hostDrop(id) { delete NET.conns[id]; NET.players = NET.players.filter(p => p.id !== id); roomSync(); }
+function kickPlayer(id) { const c = NET.conns[id]; if (c) { netSend(c, { t: 'kick' }); setTimeout(() => { try { c.close(); } catch (e) {} }, 300); } hostDrop(id); }
+function joinRoom(code) {
+  netReset(); Object.assign(NET, { err: '', msg: 'CONECTANDO...', busy: true, code });
+  if (typeof Peer === 'undefined') { NET.err = 'SEM CONEXÃO COM O SERVIDOR ONLINE'; NET.busy = false; return; }
+  let p, opened = false; try { p = new Peer(); } catch (e) { NET.err = 'FALHA AO CONECTAR'; NET.busy = false; return; }
+  NET.peer = p;
+  const fail = s => { if (opened || NET.peer !== p) return; netReset(); NET.err = s; };
+  const to = setTimeout(() => fail('SALA NÃO ENCONTRADA'), 9000);
+  p.on('error', e => { clearTimeout(to); fail(e.type === 'peer-unavailable' ? 'SALA NÃO ENCONTRADA' : 'ERRO DE CONEXÃO'); });
+  p.on('open', id => {
+    NET.me = id; const c = p.connect(PFX + code, { reliable: true }); NET.conns.host = c;
+    c.on('open', () => { clearTimeout(to); opened = true; netSend(c, { t: 'hello', char: cfg.char }); });
+    c.on('data', clientRecv);
+    c.on('close', () => { if (NET.peer === p && !NET.others) netAbort('O ANFITRIÃO FECHOU A SALA'); });
+  });
+}
+function clientRecv(m) {
+  if (!m) return;
+  if (m.t === 'room') { NET.players = m.players; NET.snap = m.snap; NET.msg = ''; NET.busy = false; if (state === 'join') setState('room'); }
+  else if (m.t === 'kick') netAbort('VOCÊ FOI REMOVIDO DA SALA');
+  else if (m.t === 'full') netAbort('SALA CHEIA');
+  else if (m.t === 'start') startOnline(m);
+}
+function toggleReady() {
+  const me = NET.players.find(p => p.id === NET.me); if (!me) return;
+  if (NET.host) { me.ready = !me.ready; roomSync(); } else netSend(NET.conns.host, { t: 'ready', v: !me.ready });
+}
+function startRoom() {
+  if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready)) return;
+  const map = cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map;
+  const m = { t: 'start', snap: NET.snap, map, ids: NET.players.map(p => p.id), chars: NET.players.map(p => p.char) };
+  netAll(m); startOnline(m);
+}
+function startOnline(m) {   // todos iniciam a mesma partida (mesmas regras e mapa); os outros jogadores entram com o personagem escolhido
+  Object.assign(cfg, m.snap); cfg.map = m.map; NET.others = m.chars.filter((c, i) => m.ids[i] !== NET.me);
+  soloSetup = false; startMatch();
+}
+function addDigit(d) { if (!NET.busy && JOIN.length < 4) { JOIN += d; NET.err = ''; } }
+function doJoin() { if (JOIN.length === 4 && !NET.busy) joinRoom(JOIN); }
+
+function drawRoom(t) {
+  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', GREEN = '#8fd6a4';
+  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
+  const k = ctx.getTransform().a / (devicePixelRatio || 1), pw = Math.min(IW - 40, 460), px = cx - pw / 2, rh = 38, rg = 5, cap = NET.cap || 8, snap = NET.snap || {};
+  const me = NET.players.find(p => p.id === NET.me), n = NET.players.length, rc = NET.players.filter(p => p.ready).length, all = n > 0 && rc === n && !NET.err;
+  let y = Math.max(10, (IH - (30 + 22 + 84 + cap * (rh + rg) + 10 + (NET.host ? 3 : 2) * 58)) / 2);
+  try { ctx.letterSpacing = '6px'; } catch (e) {}
+  txt('SALA', cx + 3, y + 15, 30, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
+  txt(snap.team > 0 ? `PARTIDA ${snap.team}v${snap.team}` : 'SALA PERSONALIZADA', cx, y + 42, 12, MUTE, 'center'); y += 58;
+  if (NET.err) txt(NET.err, cx, y + 28, 16, '#ff6b6b', 'center');
+  else if (NET.busy || !NET.code) txt(NET.msg || '...', cx, y + 28, 16, MUTE, 'center');
+  else { try { ctx.letterSpacing = '14px'; } catch (e) {} txt(NET.code, cx + 7, y + 26, 54, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
+    txt(NET.copied ? 'CÓDIGO COPIADO!' : 'CÓDIGO DA SALA · TOQUE PARA COPIAR', cx, y + 62, 11, NET.copied ? GREEN : MUTE, 'center');
+    ui.push({ x: (cx - 150) * k, y: y * k, w: 300 * k, h: 70 * k, fn: () => { try { navigator.clipboard.writeText(NET.code); NET.copied = true; } catch (e) {} } }); }
+  y += 84;
+  for (let i = 0; i < cap; i++) {
+    const p = NET.players[i], ry = y + i * (rh + rg);
+    ctx.beginPath(); ctx.roundRect(px + .5, ry + .5, pw - 1, rh - 1, 10); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = p && p.ready ? 'rgba(143,214,164,.6)' : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
+    if (!p) { txt('AGUARDANDO JOGADOR...', px + 14, ry + rh / 2 + 1, 12, '#4a4a56', 'left'); continue; }
+    const canKick = NET.host && p.id !== 'host';
+    txt(CHARS[p.char].name + (p.id === 'host' ? '  · ANFITRIÃO' : '') + (p.id === NET.me ? '  (VOCÊ)' : ''), px + 14, ry + rh / 2 + 1, 14, INK, 'left');
+    txt(p.ready ? 'PRONTO' : 'AGUARDANDO', px + pw - (canKick ? 98 : 14), ry + rh / 2 + 1, 12, p.ready ? GREEN : MUTE, 'right');
+    if (canKick) button('EXPULSAR', px + pw - 90, ry + 5, 82, rh - 10, () => kickPlayer(p.id));
+  }
+  y += cap * (rh + rg) + 10; const bw = Math.min(300, pw);
+  if (NET.host) { button(all ? 'INICIAR PARTIDA' : `INICIAR PARTIDA (${rc}/${n} PRONTOS)`, cx - bw / 2, y, bw, 50, startRoom, all ? 'primary' : undefined); y += 58; }
+  if (!NET.err && me) { button(me.ready ? 'CANCELAR PRONTO' : 'PRONTO', cx - bw / 2, y, bw, 50, toggleReady, me.ready ? undefined : 'primary'); y += 58; }
+  button('SAIR DA SALA', cx - bw / 2, y, bw, 50, leaveRoom);
+  ctx.restore();
+}
+function drawJoin(t) {
+  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
+  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
+  const bs = 64, bg = 12, nw = 84, nh = 50, ng = 8, contH = 34 + 28 + bs + 40 + 4 * (nh + ng) + 52, y0 = Math.max(10, (IH - contH) / 2);
+  try { ctx.letterSpacing = '5px'; } catch (e) {} txt('ENTRAR NA SALA', cx + 3, y0 + 15, 26, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
+  const by = y0 + 62, bx = cx - (4 * bs + 3 * bg) / 2;
+  for (let i = 0; i < 4; i++) { const x = bx + i * (bs + bg); ctx.beginPath(); ctx.roundRect(x + .5, by + .5, bs - 1, bs - 1, 12); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = i === JOIN.length ? INK : 'rgba(255,255,255,.2)'; ctx.lineWidth = i === JOIN.length ? 2 : 1; ctx.stroke(); if (JOIN[i]) txt(JOIN[i], x + bs / 2, by + bs / 2 + 2, 36, INK, 'center'); }
+  txt(NET.err || (NET.busy ? NET.msg : 'DIGITE O CÓDIGO DE 4 DÍGITOS'), cx, by + bs + 22, 13, NET.err ? '#ff6b6b' : MUTE, 'center');
+  const ny = by + bs + 44, nx = cx - (3 * nw + 2 * ng) / 2, keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'APAGAR', '0', 'ENTRAR'];
+  keys.forEach((kk, i) => { const x = nx + (i % 3) * (nw + ng), yy = ny + Math.floor(i / 3) * (nh + ng);
+    button(kk, x, yy, nw, nh, kk === 'APAGAR' ? () => { JOIN = JOIN.slice(0, -1); } : kk === 'ENTRAR' ? doJoin : () => addDigit(kk), kk === 'ENTRAR' && JOIN.length === 4 && !NET.busy ? 'primary' : undefined); });
+  button('VOLTAR', cx - 110, ny + 4 * (nh + ng) + 4, 220, 44, () => { netReset(); setState('modes'); });
+  ctx.restore();
+}
+
 /* ---------------------------- GAME LOOP ------------------------------- */
 let last = performance.now();
 function loop(now) {
   let dt = Math.min((now - last) / 1000, .05); last = now; ui = [];
   updateMusic();
   if (state === 'intro') { if (!introGate) introT += dt; drawIntro(introT); }
+  else if (state === 'train') { menuT += dt; drawTrain(menuT); }
+  else if (state === 'modes') { menuT += dt; drawModes(menuT); }
   else if (state === 'maps') { menuT += dt; drawMaps(menuT); }
   else if (state === 'setup') { menuT += dt; drawSetup(menuT); }
+  else if (state === 'room') { menuT += dt; drawRoom(menuT); }
+  else if (state === 'join') { menuT += dt; drawJoin(menuT); }
   else if (state === 'options') { menuT += dt; drawOptions(menuT); }
   else if (state === 'menu') { menuT += dt; drawMenu(menuT); }
   else if (state === 'info') { menuT += dt; drawInfo(menuT); }
@@ -2344,6 +2662,9 @@ function loop(now) {
     drawFloor();
     for (const d of decals) { ctx.fillStyle = `rgba(150,10,35,${d.a})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill(); }
     drawPickups(menuT); drawCrates();
+    if (M && M.team) for (const f of [player, ...bots]) if (!f.dead) {   // anel no chão: verde = seu time, vermelho = inimigo
+      ctx.strokeStyle = f.team === player.team ? 'rgba(143,214,164,.85)' : 'rgba(255,90,90,.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(f.x, f.y, 24, 0, TAU); ctx.stroke();
+    }
     for (const b of bots) if (!b.dead) drawFighter(b);
     if (!player.dead) drawFighter(player);
     drawThrown(); drawFx();
