@@ -278,6 +278,7 @@ cfg.pts = clamp(+cfg.pts || 0, 0, PTS.length - 1); cfg.time = clamp(+cfg.time ||
 cfg.musicVol = clamp(isFinite(cfg.musicVol) ? Math.round(cfg.musicVol) : 7, 0, 10); cfg.sfxVol = clamp(isFinite(cfg.sfxVol) ? Math.round(cfg.sfxVol) : 8, 0, 10); cfg.music = clamp(isFinite(cfg.music) ? Math.round(cfg.music) : 0, 0, 5); cfg.char = clamp(cfg.char, 0, 7); cfg.map = clamp(isFinite(cfg.map) ? Math.round(cfg.map) : 3, 0, 3);   // map: 0-2 = mapa fixo, 3 = aleatório
 cfg.team = clamp(+cfg.team || 0, 0, 4);   // 0 = sala personalizada (todos contra todos); 1..4 = 1v1..4v4 (times)
 const nBots = () => cfg.team > 0 ? cfg.team * 2 - 1 : cfg.bots + (NET.online ? NET.guests.length : 0);   // 1v1: 1 bot | 2v2: 3 bots | 3v3: 5 | 4v4: 7
+let bgSetup = false, TUT = null, nameFocus = false, nameErr = false;   // bgSetup = tela de configuração do CAMPO DE BATALHA | TUT = tutorial em andamento
 let soloSetup = false;   // true = a tela de configuração é a do SOLITÁRIO (só mapa e armas)
 const saveCfg = () => { try { localStorage.setItem('oc_cfg', JSON.stringify(cfg)); } catch (e) {} };
 const VIEW_W = 1200, VIEW_H = 675;   // área do mapa que TODO jogador de PC enxerga (em unidades), em qualquer tamanho de tela
@@ -344,6 +345,11 @@ addEventListener('keydown', e => {
   if (bindCapture) {   // OPÇÕES: esperando a nova tecla (Esc cancela)
     e.preventDefault(); if (e.code !== 'Escape') setKey(bindCapture, e.code); bindCapture = null; return;
   }
+  if (state === 'setup' && nameFocus) {   // digitando o nome da sala
+    cfg.roomName = cfg.roomName || '';
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { nameErr = false; if (cfg.roomName.length < 16) cfg.roomName += e.key; e.preventDefault(); return; }
+    if (e.code === 'Backspace') { cfg.roomName = cfg.roomName.slice(0, -1); e.preventDefault(); return; }
+  }
   input.keys[e.code] = true;
   if (e.code === KEYS.hit) showHit = !showHit;
   if (e.code === KEYS.reload) input.reloadReq = true;
@@ -356,8 +362,9 @@ addEventListener('keydown', e => {
     if (state === 'join') { const d = /^(Digit|Numpad)\d$/.test(e.code) ? e.code.slice(-1) : ''; if (d) addDigit(d); else if (e.code === 'Backspace') JOIN = JOIN.slice(0, -1); else if (e.code === 'Enter' || e.code === 'NumpadEnter') doJoin(); }
     return;
   }
+  if (e.code === 'Enter' && state === 'play' && TUT) tutSkip();   // pula o passo do tutorial
   if (e.code === 'Escape') { if (state === 'play') setState('pause'); else if (state === 'pause') setState('play'); else if (state === 'options') setState(optBack); else if (state !== 'menu') setState('menu'); }   // Esc: pausa / continua / volta
-  if (e.code === 'Enter') { if (state === 'menu') setState('modes'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup') startSetup(); else if (state === 'mend') startMatch(); else if (state === 'dead') startGame(training); }
+  if (e.code === 'Enter') { if (state === 'menu') setState('modes'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup') startSetup(); else if (state === 'mend') startMatch(); else if (state === 'dead') startGame(training); else if (state === 'tutend') setState('modes'); }
   if (state === 'log') { if (e.code === 'ArrowDown' || e.code === 'PageDown') logScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') logScroll -= 70; }
   if (state === 'info' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) infoIdx = (infoIdx + (e.code === 'ArrowRight' ? 1 : WKEYS.length - 1)) % WKEYS.length;
   if (state === 'maps' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { const n = MAPS.length + 1; cfg.map = (cfg.map + (e.code === 'ArrowRight' ? 1 : n - 1)) % n; saveCfg(); }
@@ -370,8 +377,9 @@ canvas.addEventListener('mousedown', e => {
   if (state === 'intro') { introClick(); return; }
   if (e.button === 2 && state === 'play') { if (player && player.cover) input.peek = true; else input.throwReq = true; return; }   // botão direito = arremessar a arma
   if (e.button !== 0) return;
+  if (state === 'play' && TUT && tutHit(e.clientX, e.clientY)) return;
   if (state === 'play') { input.down = true; input.buffer = .15; }
-  else { bindCapture = null; for (const b of ui) if (input.mx > b.x && input.mx < b.x + b.w && input.my > b.y && input.my < b.y + b.h) { b.fn(); break; } }
+  else { bindCapture = null; nameFocus = false; for (const b of ui) if (input.mx > b.x && input.mx < b.x + b.w && input.my > b.y && input.my < b.y + b.h) { b.fn(); break; } }
 });
 addEventListener('mouseup', e => { if (e.button === 0) input.down = false; if (e.button === 2) input.peek = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -400,7 +408,8 @@ function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y >
 function onTouchStart(t) {
   if (state === 'intro') { introClick(); return; }
   input.mx = t.clientX; input.my = t.clientY;
-  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; bindCapture = null; clickUI(t.clientX, t.clientY); return; }
+  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; bindCapture = null; nameFocus = false; clickUI(t.clientX, t.clientY); return; }
+  if (TUT && tutHit(t.clientX, t.clientY)) return;
   const L = touchLayout();
   for (const b of L.btns) if (Math.hypot(t.clientX - b.x, t.clientY - b.y) < b.r + 8) {
     touch.btn[t.identifier] = b.k;
@@ -614,7 +623,8 @@ function stepMatch(dt) {   // devolve o dt da simulação (-1 = congelada)
   }
   return -1;
 }
-function setState(s) { state = s; if (s === 'menu') netReset(); if (s === 'room' || s === 'join' || s === 'menu' || s === 'setup' || s === 'maps' || s === 'modes' || s === 'train') M = null; canvas.style.cursor = s === 'play' ? 'none' : 'default'; input.down = false; input.peek = false; resetTouch(); }
+function setState(s) { if ((state === 'setup' && s !== 'room') || (s === 'setup' && state !== 'room')) cfg.roomName = '';   // o nome da sala não fica guardado ao sair da configuração
+  nameFocus = false; nameErr = false; if (s === 'modes' || s === 'menu' || s === 'train') bgSetup = false; if (TUT && !['play', 'pause', 'options', 'tutend'].includes(s)) tutEnd(); state = s; if (s === 'menu') netReset(); if (s === 'room' || s === 'join' || s === 'menu' || s === 'setup' || s === 'maps' || s === 'modes' || s === 'train') M = null; canvas.style.cursor = s === 'play' ? 'none' : 'default'; input.down = false; input.peek = false; resetTouch(); }
 
 /* ------------------------------ COMBATE ------------------------------- */
 function tryPunch(f) {
@@ -654,6 +664,7 @@ const enemiesOf = f => [player, ...bots].filter(o => o !== f && !o.dead && o.tea
 
 function damage(t, dmg, ang, src) {
   if (t.dead) return;
+  if (TUT) tutDamage(t, dmg, src);
   t.hp -= dmg; t.hitFlash = .1;
   t.vx += Math.cos(ang) * 90 * t.mTgh; t.vy += Math.sin(ang) * 90 * t.mTgh;
   for (let i = 0; i < 3; i++) addDecal(t.x + rnd(-10, 10) + Math.cos(ang) * 10, t.y + rnd(-10, 10) + Math.sin(ang) * 10, rnd(2, 5));
@@ -670,6 +681,7 @@ function kill(f, src) {
 }
 
 function shoot(f, w) {
+  if (TUT && f.isPlayer) { TUT.c.shots++; if (f.cover && f.peekK > .5) TUT.c.peek++; }
   f.fireCd = w.rate; f.mag--; f.kick = w.kick; f.flash = .06;
   sfxGun(f.weapon, f.isPlayer || !player ? 1 : clamp(1 - Math.hypot(f.x - player.x, f.y - player.y) / 900, .15, 1));   // som próprio de cada arma (mais baixo se o atirador está longe)
   if (NET.online && NET.host) NET.ev.push(['s', f.weapon, Math.round(f.x), Math.round(f.y)]);
@@ -697,6 +709,7 @@ function sweepShot(f, a, m, w) {
 }
 /* Arremesso: a arma sai girando; quem for atingido fica nocauteado por um tempo */
 function throwWeapon(f) {
+  if (TUT && f.isPlayer) TUT.c.thr++;
   const a = f.angle;
   thrown.push({ x: f.x + Math.cos(a) * 22, y: f.y + Math.sin(a) * 22,
     vx: Math.cos(a) * C.throwSpeed + f.vx * .3, vy: Math.sin(a) * C.throwSpeed + f.vy * .3,
@@ -713,6 +726,7 @@ function landThrown(t) {
   else for (let i = 0; i < 4; i++) sparks.push({ x: t.x, y: t.y, vx: rnd(-90, 90), vy: rnd(-90, 90), life: .6 });   // arma vazia some
 }
 function hitByThrown(t, f) {
+  if (TUT && f.dummy && t.owner.isPlayer) TUT.c.thrHit++;
   t.hits.add(f);
   const a = Math.atan2(t.vy, t.vx);
   f.stun = f.stunMax = C.throwStun * f.mTgh; f.fallDir = Math.random() < .5 ? -1 : 1; f.hitFlash = .12;
@@ -979,13 +993,14 @@ function updatePlay(dt) {
   for (const b of bots) {
     if (b.dead) continue;   // ninguém renasce: quem cai só volta na próxima rodada
     if (b.remote) { remoteStep(b, dt); continue; }
-    updateFighter(b, dt, b.stun > 0 ? {} : botIntent(b, dt));
+    updateFighter(b, dt, b.stun > 0 ? {} : b.dummy ? { mx: 0, my: 0, aim: Math.atan2(player.y - b.y, player.x - b.x), fire: false, punch: false, reload: false, throw: false } : botIntent(b, dt));
   }
   updateBullets(dt); updateThrown(dt);
   if (training) {   // solitário: munição infinita
     const pw = player.weapon && WEAPONS[player.weapon]; if (pw && !pw.melee && player.reserve < pw.reserve) player.reserve = pw.reserve;
   }
 
+  if (TUT) pickupTimer = 1e9;
   pickupTimer -= dt;
   if (pickupTimer <= 0) { pickupTimer = LOOTS[cfg.loot].every; if (pickups.length < LOOTS[cfg.loot].cap) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
 
@@ -994,6 +1009,7 @@ function updatePlay(dt) {
   for (const r of rings) { r.life -= dt * 6; r.r += dt * 140; } rings = rings.filter(r => r.life > 0);
   for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= .9; s.vy *= .9; s.life -= dt * 5; } sparks = sparks.filter(s => s.life > 0);
   for (const c of casings) { c.x += c.vx * dt; c.y += c.vy * dt; c.vx *= .92; c.vy *= .92; c.rot += c.vr * dt; c.vr *= .94; c.life -= dt; } casings = casings.filter(c => c.life > 0);
+  if (TUT) tutUpdate(dt);
 }
 
 /* ------------------------------ DESENHO ------------------------------- */
@@ -1490,7 +1506,7 @@ function drawHUD(t) {
   const pct = clamp(player.hp / player.maxHp, 0, 1);
   if (pct > 0) { ctx.fillStyle = pct > .5 ? '#4cf08a' : pct > .25 ? '#ffd23f' : '#ff3b5c'; ctx.beginPath(); ctx.roundRect(20, 20, 224 * pct, 14, 7); ctx.fill(); }
   txt(`HP ${Math.ceil(player.hp)}`, 24, 27, 13, '#fff', 'left');
-  if (training) { txt('MODO SOLITÁRIO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
+  if (TUT) { /* o tutorial tem o próprio painel */ } else if (training) { txt('MODO SOLITÁRIO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
   else { txt(`ABATES ${kills}`, 18, 56, 18, '#e7e4d3', 'left'); txt(`BOTS VIVOS ${bots.filter(b => !b.dead).length}/${bots.length}`, 18, 80, 14, 'rgba(255,255,255,.6)', 'left'); }
 
   // Arma selecionada (estilo Kusan): bala, munição, nome e silhueta (proporção das capturas do jogo)
@@ -1543,7 +1559,7 @@ function drawHUD(t) {
   if (player.reloadT > 0) { ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x, y, 18, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - player.reloadT / player.reloadMax)); ctx.stroke(); }
   ctx.shadowBlur = 0;
   if (dmgFlash > 0) { ctx.fillStyle = `rgba(255,30,60,${dmgFlash * .5})`; ctx.fillRect(0, 0, W, H); }
-  drawTopRight(); drawMatchHUD();
+  drawTopRight(); drawMatchHUD(); if (TUT) drawTutorial();
   if (TOUCH && state === 'play') drawTouch();
 }
 
@@ -1607,6 +1623,7 @@ function drawSetupPre() {
   const cyc2 = cyc, fmt = sec => sec >= 60 ? (sec / 60) + ' MIN' + (sec % 60 ? ' ' + sec % 60 + 'S' : '') : sec + ' S';
   const diffR = ['DIFICULDADE', DIFFS[cfg.diff].name, () => cfg.diff = Math.max(0, cfg.diff - 1), () => cfg.diff = Math.min(2, cfg.diff + 1)];
   const lootR = ['ARMAS', LOOTS[cfg.loot].name, () => cfg.loot = cyc2(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, 1)];
+  if (!bgSetup && cfg.bots < 1) cfg.bots = 1;   // só o campo de batalha aceita 0 bots
   const rows = solo ? [lootR] : pre ? [   // solitário: só armas | predefinido: pontos, armas e dificuldade (o mapa fica no painel)
     ['PONTOS', String(PTS[cfg.pts]), () => cfg.pts = cyc2(cfg.pts, PTS.length, -1), () => cfg.pts = cyc2(cfg.pts, PTS.length, 1)],
     lootR, diffR,
@@ -1614,20 +1631,30 @@ function drawSetupPre() {
     ['MODO', MODES[cfg.mode], () => cfg.mode = cyc2(cfg.mode, 2, -1), () => cfg.mode = cyc2(cfg.mode, 2, 1)],
     ['PONTOS', cfg.mode ? '∞' : String(PTS[cfg.pts]), cfg.mode ? null : () => cfg.pts = cyc2(cfg.pts, PTS.length, -1), cfg.mode ? null : () => cfg.pts = cyc2(cfg.pts, PTS.length, 1)],
     diffR,
-    ['BOTS', String(cfg.bots), () => cfg.bots = Math.max(1, cfg.bots - 1), () => cfg.bots = Math.min(8, cfg.bots + 1)],
+    ['BOTS', String(cfg.bots), () => cfg.bots = Math.max(bgSetup ? 0 : 1, cfg.bots - 1), () => cfg.bots = Math.min(8, cfg.bots + 1)],
     ['TEMPO', fmt(TIMES[cfg.time]), () => cfg.time = cyc2(cfg.time, TIMES.length, -1), () => cfg.time = cyc2(cfg.time, TIMES.length, 1)],
     lootR,
   ];
   const R = rows.length;
   const f = clamp((pw - 110) / 398, .6, 1), selW = 150 * f, selH = 104 * f, sdW = 108 * f, sdH = 76 * f;
   const rh = R > 3 ? 44 : 56, rgMin = R > 3 ? 12 : 20, rowsMin = R * rh + (R - 1) * rgMin, ph = noMap ? 0 : Math.max(Math.round(46 + selH + 74), wide ? rowsMin : 0), rg = noMap ? rgMin + 4 : wide && R > 1 ? (ph - R * rh) / (R - 1) : rgMin, rowsH = noMap ? R * rh + (R - 1) * rg : wide ? ph : rowsMin;
-  const descH = pre || solo ? 0 : 30;
-  const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
-  const y0 = Math.max(14, (IH - contH) / 2), px = cx - tot / 2, py = y0 + ts + 34;
+  const descH = pre || solo ? 0 : 30, nameH = solo ? 0 : 58;
+  const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + nameH + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
+  const y0 = Math.max(14, (IH - contH) / 2), px = cx - tot / 2, py = y0 + ts + 34 + nameH;
   // título (mesmo estilo das outras telas)
   try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
-  txt(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : 'SALA PERSONALIZADA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
+  txt(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : bgSetup ? 'CAMPO DE BATALHA' : 'SALA PERSONALIZADA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
   try { ctx.letterSpacing = '0px'; } catch (e) {}
+  if (!solo) {   // nome da sala (aparece no lugar de SALA dentro do lobby)
+    const fx = cx - rcw / 2, fy = y0 + ts + 34, fl = 130, fw = rcw - fl, rn = cfg.roomName || '';
+    txt('NOME', fx, fy + 22, 15, INK, 'left');
+    ctx.beginPath(); ctx.roundRect(fx + fl + .5, fy + .5, fw - 1, 43, 12); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); const bad = nameErr && !rn.trim(); ctx.strokeStyle = bad ? '#ff6b6b' : nameFocus ? INK : 'rgba(255,255,255,.28)'; ctx.lineWidth = nameFocus || bad ? 2 : 1; ctx.stroke();
+    if (bad) txt('ESCREVA UM NOME PARA CRIAR A SALA', fx + fl, fy + 52, 10, '#ff6b6b', 'left');
+    txt(rn || 'SALA', fx + fl + 16, fy + 23, 17, rn ? INK : '#5c5c68', 'left');
+    if (nameFocus && Math.floor(menuT * 2) % 2 === 0) { ctx.font = 'bold 17px "Courier New", monospace'; const cw2 = ctx.measureText(rn).width; ctx.fillStyle = INK; ctx.fillRect(fx + fl + 18 + cw2, fy + 11, 2, 22); }
+    if (!rn && !nameFocus) txt(TOUCH ? 'TOQUE PARA ESCOLHER' : 'CLIQUE E DIGITE', fx + fl + fw - 14, fy + 23, 10, '#5c5c68', 'right');
+    ui.push({ x: (fx + fl) * k, y: fy * k, w: fw * k, h: 44 * k, fn: () => { if (TOUCH) { const v = prompt('Nome da sala (até 16 letras)', cfg.roomName || ''); if (v !== null) { cfg.roomName = v.slice(0, 16); nameErr = false; } } else nameFocus = true; } });
+  }
   if (!noMap) {   // painel do mapa (carrossel): só no SOLITÁRIO
   ctx.beginPath(); ctx.roundRect(px + .5, py + .5, pw - 1, ph - 1, 16); ctx.fillStyle = 'rgba(255,255,255,.03)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
   const pcx = px + pw / 2;
@@ -1660,13 +1687,130 @@ function drawSetupPre() {
   });
   const by = py + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40;
   if (!pre && !solo) txt(cfg.mode ? 'Infinito: as rodadas não acabam, só o placar sobe. Esc sai da partida.' : `Clássico: vence a partida quem chegar primeiro a ${PTS[cfg.pts]} pontos (1 ponto por rodada).`, cx, by - 36, 11, '#5c5c68', 'center');
-  button(solo ? 'COMEÇAR' : 'CRIAR SALA', cx - 140, by, 280, 56, startSetup, 'primary');
+  if (bgSetup) txt('Todos contra todos: a partida começa quando todos da sala estiverem prontos.', cx, by - 16, 11, '#5c5c68', 'center');
+  button(solo ? 'COMEÇAR' : 'CRIAR SALA', cx - 140, by, 280, 56, startSetup, solo || (cfg.roomName || '').trim() ? 'primary' : undefined);
   cornerBtn('VOLTAR', -1, IW, IH, () => setState(solo ? 'train' : 'modes'));
   ctx.restore();
 }
 
-const startSetup = () => { saveCfg(); if (soloSetup) { cfg.char = Math.floor(Math.random() * CHARS.length); startGame(true); } else createRoom(); };   // solitário: personagem sorteado
+const startSetup = () => { if (!soloSetup && !(cfg.roomName || '').trim()) { nameErr = true; if (!TOUCH) nameFocus = true; return; }   // sala sem nome não é criada
+  saveCfg(); if (soloSetup) { cfg.char = Math.floor(Math.random() * CHARS.length); startGame(true); } else createRoom(); };   // solitário: personagem sorteado
 function drawSetup(t) { drawSetupPre(); }   // predefinidos e sala personalizada usam a mesma tela (muda só a lista de opções)
+
+
+/* ------------------------------ TUTORIAL -------------------------------- */
+/* Passo a passo no mapa DOCAS. Cada passo ensina uma ação do personagem e só avança quando o jogador a faz. ENTER (ou o botão PULAR) pula o passo. */
+const tk = id => keyName(KEYS[id]);
+function tutSpot(r, a0) {
+  for (let i = 0; i < 24; i++) { const a = a0 + i * .52, x = player.x + Math.cos(a) * r, y = player.y + Math.sin(a) * r; if (x > 60 && y > 60 && x < WW - 60 && y < WH - 60 && !inCrate(x, y, 36)) return { x, y }; }
+  return freeSpot(r * .6, player);
+}
+function tutDummy() {   // boneco de treino: parado, olha para o jogador e nunca morre
+  const T = TUT; if (T.dummy && !T.dummy.dead) { if (Math.hypot(T.dummy.x - player.x, T.dummy.y - player.y) > 520) Object.assign(T.dummy, tutSpot(280, player.angle)); return; }
+  const b = { pal: CHARS[(cfg.char + 1) % CHARS.length], pid: 1, team: 1 }; spawnBot(b); Object.assign(b, tutSpot(230, player.angle)); b.dummy = true; bots.push(b); T.dummy = b;
+}
+function tutGun() { if (!player.weapon) { const w = WEAPONS.glock; pickups.length = 0; giveWeapon(player, 'glock', w.mag, w.reserve); } }
+function tutWall() {   // ponto da parede mais próxima
+  let best = null, bd = 1e9; for (const c of crates) { const x = clamp(player.x, c.x, c.x + c.w), y = clamp(player.y, c.y, c.y + c.h), d = Math.hypot(x - player.x, y - player.y); if (d < bd) { bd = d; best = { x, y, label: 'PAREDE' }; } }
+  return best;
+}
+const tutNearPk = () => { let b = null, bd = 1e9; for (const p of pickups) { const d = Math.hypot(p.x - player.x, p.y - player.y); if (d < bd) { bd = d; b = { x: p.x, y: p.y, label: 'ARMA' }; } } return b; };
+const tutDum = T => T.dummy && !T.dummy.dead ? { x: T.dummy.x, y: T.dummy.y, label: 'ALVO' } : null;
+const TUT_STEPS = [
+  { t: 'MOVER', goal: 420, ok: 'ÓTIMO! É assim que você anda.', val: c => c.dist,
+    tx: () => TOUCH ? 'Arraste o dedo no lado ESQUERDO da tela (joystick azul) para andar pelo mapa.' : `Ande pelo mapa com ${tk('up')} ${tk('left')} ${tk('down')} ${tk('right')} ou com as setas do teclado.` },
+  { t: 'MIRAR', goal: 5, ok: 'ISSO! O personagem sempre olha para a mira.', val: c => c.turn,
+    tx: () => TOUCH ? 'Arraste o dedo no lado DIREITO (joystick rosa): o personagem olha para onde você arrasta. Gire em volta de si.' : 'Mexa o mouse: o personagem olha para a mira (a cruz na tela). Gire a mira ao redor dele.' },
+  { t: 'SOCAR', goal: 3, count: 1, ok: 'BOA! No 3º soco seguido o golpe é FORTE.', val: c => c.hitP, setup: tutDummy, mark: tutDum,
+    tx: () => (TOUCH ? 'Chegue perto do boneco marcado e toque no lado direito da tela' : 'Chegue perto do boneco marcado e clique com o botão esquerdo') + ' para socar. Acerte 3 socos seguidos: o 3º é o mais forte.' },
+  { t: 'PEGAR ARMA', goal: 1, ok: 'ARMADO! A munição aparece no canto inferior direito.', val: () => player.weapon ? 1 : 0, setup: () => { pickups.length = 0; const p = tutSpot(150, player.angle + 1.2), w = WEAPONS.glock; pickups.push({ x: p.x, y: p.y, key: 'glock', mag: w.mag, reserve: w.reserve, t: 0 }); }, mark: tutNearPk,
+    tx: () => `Vá até a arma marcada no chão e ${TOUCH ? 'toque no botão E' : 'aperte ' + tk('interact')} para pegar.` },
+  { t: 'ATIRAR', goal: 3, count: 1, ok: 'TIROS CERTEIROS!', val: c => c.hitS, setup: () => { tutGun(); tutDummy(); }, mark: tutDum,
+    tx: () => `Mire no boneco e ${TOUCH ? 'segure o toque no lado direito' : 'clique (segure para atirar sem parar)'}. Acerte 3 tiros.` },
+  { t: 'RECARREGAR', goal: 1, ok: 'RECARREGADO! O anel amarelo na mira mostra o tempo.', val: c => c.rel, setup: () => { tutGun(); player.mag = Math.min(player.mag, 4); },
+    tx: () => `Pente quase vazio! ${TOUCH ? 'Toque em R' : 'Aperte ' + tk('reload')} para recarregar. Enquanto recarrega você não consegue atirar.` },
+  { t: 'ARREMESSAR', goal: 1, ok: 'NOCAUTE! Quem leva a arma na cara cai por alguns segundos.', val: c => c.thrHit, setup: () => { tutGun(); tutDummy(); }, mark: T => player.weapon ? tutDum(T) : tutNearPk(),
+    tx: () => `${TOUCH ? 'Toque em G' : 'Aperte ' + tk('throw') + ' ou o botão DIREITO do mouse'} para arremessar a arma girando. Acerte o boneco! Errou? Pegue a arma de volta (${tk('interact')}) e tente de novo.` },
+  { t: 'COBERTURA', goal: 1, ok: 'EM COBERTURA! Seu corpo fica menor e mais difícil de acertar.', val: c => c.cover, setup: () => tutGun(), mark: tutWall,
+    tx: () => `Chegue bem perto de um contêiner ou caixote e ${TOUCH ? 'toque em Q' : 'aperte ' + tk('cover')} para se encostar na parede. Mova-se ao longo dela; afastar-se sai da cobertura.` },
+  { t: 'ESPIAR E ATIRAR', goal: 1, ok: 'PERFEITO! Espiar dá tiro 100% preciso, mas você fica exposto.', val: c => c.peek, setup: () => { tutGun(); tutDummy(); }, mark: tutDum,
+    tx: () => `Em cobertura, o clique atira às cegas (impreciso). ${TOUCH ? 'Segure o botão M' : 'Segure o botão DIREITO do mouse'} para espiar e atire no boneco. Se não houver ângulo, chegue mais perto da quina.` },
+  { t: 'DERROTE O BOT', goal: 1, ok: 'VITÓRIA!', val: (c, T) => T.boss && T.boss.dead ? 1 : 0, mark: T => T.boss && !T.boss.dead ? { x: T.boss.x, y: T.boss.y, label: 'BOT' } : null,
+    setup: T => { tutGun(); bots = bots.filter(b => false); T.dummy = null; const b = { pal: CHARS[(cfg.char + 2) % CHARS.length], pid: 1, team: 1 }; spawnBot(b); bots.push(b); T.boss = b; for (let i = 0; i < 3; i++) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); } },
+    tx: () => 'Prova final: use tudo o que aprendeu e derrube o bot (nível FÁCIL). Se a sua vida zerar, ela enche de novo: no tutorial você não morre.' },
+];
+function startTutorial() {
+  soloSetup = false; bgSetup = false;
+  const sm = cfg.map, sd = TUT ? TUT.diff : cfg.diff; cfg.map = 0; cfg.diff = 0; startGame(true); cfg.map = sm;   // mapa DOCAS, bots no nível fácil
+  pickups.length = 0; pickupTimer = 1e9;
+  TUT = { i: 0, t: 0, ok: false, okT: 0, fin: false, dummy: null, boss: null, diff: sd, heal: 0, skip: null, px: player.x, py: player.y, pa: player.angle, wasCover: false, prl: 0,
+    c: { dist: 0, turn: 0, hitP: 0, hitS: 0, shots: 0, peek: 0, thr: 0, thrHit: 0, rel: 0, cover: 0 } };
+  TUT.b = { ...TUT.c };
+}
+function tutEnd() { if (TUT) { cfg.diff = TUT.diff; TUT = null; } }
+function tutNext() {
+  const T = TUT; T.i++; T.ok = false; T.t = 0;
+  if (T.i >= TUT_STEPS.length) { T.fin = true; sfxHorn(); setState('tutend'); return; }
+  T.b = { ...T.c }; const s = TUT_STEPS[T.i]; if (s.setup) s.setup(T);
+}
+function tutSkip() { if (TUT && !TUT.fin) tutNext(); }
+function tutHit(x, y) { const r = TUT && TUT.skip; if (r && x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h) { tutSkip(); return true; } return false; }
+function tutDamage(t, dmg, src) {
+  const T = TUT;
+  if (t.dummy) { if (src && src.isPlayer) { if (player.weapon) T.c.hitS++; else T.c.hitP++; } if (t.hp - dmg <= 5) t.hp = t.maxHp + dmg; }   // boneco nunca cai
+  else if (t.isPlayer && t.hp - dmg <= 1) { t.hp = t.maxHp + dmg; T.heal = 3; }   // jogador nunca morre
+}
+function tutUpdate(dt) {
+  const T = TUT; if (!T || T.fin) return; const c = T.c; T.t += dt; T.heal = Math.max(0, T.heal - dt);
+  c.dist += Math.hypot(player.x - T.px, player.y - T.py); T.px = player.x; T.py = player.y;
+  c.turn += Math.abs(angDiff(player.angle, T.pa)); T.pa = player.angle;
+  if (player.cover && !T.wasCover) c.cover++; T.wasCover = !!player.cover;
+  if (T.prl > 0 && player.reloadT <= 0 && player.weapon) c.rel++; T.prl = player.reloadT;
+  if (T.ok) { T.okT += dt; if (T.okT > 1.4) tutNext(); return; }
+  const s = TUT_STEPS[T.i], b = T.b, v = s.val(Object.fromEntries(Object.keys(c).map(k => [k, c[k] - b[k]])), T);
+  if (v >= s.goal) { T.ok = true; T.okT = 0; sfxBeep(880, .12); }
+}
+function tutMark(wx, wy, label, W, H) {
+  const sx = (wx - cam.x) * ZOOM, sy = (wy - cam.y) * ZOOM, t = menuT, Y = '#ffd23f';
+  if (sx > 30 && sx < W - 30 && sy > 30 && sy < H - 30) {
+    const r = 34 + Math.sin(t * 5) * 4; ctx.strokeStyle = Y; ctx.fillStyle = Y; ctx.lineWidth = 3; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t * 30; ctx.beginPath(); ctx.arc(sx, sy, r, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    const ay = sy - r - 14 - Math.abs(Math.sin(t * 4)) * 6; ctx.beginPath(); ctx.moveTo(sx, ay + 10); ctx.lineTo(sx - 8, ay - 4); ctx.lineTo(sx + 8, ay - 4); ctx.closePath(); ctx.fill();
+    if (label) txt(label, sx, ay - 16, 12, Y, 'center');
+  } else {
+    const a = Math.atan2(sy - H / 2, sx - W / 2), ex = clamp(sx, 30, W - 30), ey = clamp(sy, 30, H - 30);
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(a); ctx.fillStyle = Y; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-9, -10); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill(); ctx.restore();
+    if (label) txt(label, ex - Math.cos(a) * 34, ey - Math.sin(a) * 34, 11, Y, 'center');
+  }
+}
+function drawTutorial() {
+  const T = TUT, W = innerWidth, H = innerHeight, s = TUT_STEPS[T.i]; if (!s || T.fin) return;
+  const INK = '#e7e4d3', GRN = '#8fd6a4', c = T.c, b = T.b, v = Math.min(s.goal, s.val(Object.fromEntries(Object.keys(c).map(k => [k, c[k] - b[k]])), T));
+  if (!T.ok) { const m = s.mark && s.mark(T); if (m) tutMark(m.x, m.y, m.label, W, H); }
+  const pw = Math.min(560, W - 24), px = (W - pw) / 2, py = W >= 900 ? 12 : 96, lines = wrapLines(T.ok ? s.ok : s.tx(), pw - 36, 13), ph = 100 + lines.length * 18;
+  ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 16); ctx.fillStyle = 'rgba(8,8,12,.78)'; ctx.fill(); ctx.strokeStyle = T.ok ? GRN : 'rgba(231,228,211,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+  txt(`TUTORIAL · PASSO ${T.i + 1}/${TUT_STEPS.length}`, px + 18, py + 22, 11, '#8a8a96', 'left');
+  const sk = { x: px + pw - 112, y: py + 8, w: 98, h: 26 }; T.skip = sk; const hv = input.mx > sk.x && input.mx < sk.x + sk.w && input.my > sk.y && input.my < sk.y + sk.h;
+  ctx.beginPath(); ctx.roundRect(sk.x, sk.y, sk.w, sk.h, 13); ctx.fillStyle = hv ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.05)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.stroke();
+  txt(TOUCH ? 'PULAR' : 'PULAR [ENTER]', sk.x + sk.w / 2, sk.y + 14, 10, INK, 'center');
+  txt(s.t, px + 18, py + 52, 22, T.ok ? GRN : INK, 'left');
+  lines.forEach((l, i) => txt(l, px + 18, py + 78 + i * 18, 13, T.ok ? GRN : 'rgba(231,228,211,.9)', 'left'));
+  const by = py + ph - 20, bw = pw - 36 - (s.count ? 50 : 0), f = T.ok ? 1 : v / s.goal;
+  ctx.beginPath(); ctx.roundRect(px + 18, by, bw, 8, 4); ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
+  if (f > 0) { ctx.beginPath(); ctx.roundRect(px + 18, by, Math.max(8, bw * f), 8, 4); ctx.fillStyle = T.ok ? GRN : '#ffd23f'; ctx.fill(); }
+  if (s.count) txt(`${Math.min(v, s.goal)}/${s.goal}`, px + pw - 18, by + 4, 13, INK, 'right');
+  if (T.heal > 0) txt('SUA VIDA ENCHEU DE NOVO · NO TUTORIAL VOCÊ NÃO MORRE', W / 2, H - 150, 13, '#ffd23f', 'center');
+}
+function drawTutEnd() {
+  const ms = clamp(innerHeight / 560, .55, 1), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, INK = '#e7e4d3', MUTE = '#8a8a96';
+  ctx.fillStyle = 'rgba(8,8,12,.85)'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
+  const y0 = Math.max(16, (IH - 330) / 2);
+  txt('TUTORIAL CONCLUÍDO', cx, y0 + 20, clamp(IW / 16, 18, 30), '#8fd6a4', 'center');
+  wrapLines('Você já sabe mover, mirar, socar, pegar armas, atirar, recarregar, arremessar e usar cobertura. Agora é só entrar numa partida.', Math.min(560, IW - 40), 13).forEach((l, i) => txt(l, cx, y0 + 66 + i * 20, 13, MUTE, 'center'));
+  button('JOGAR', cx - 130, y0 + 150, 260, 52, () => setState('modes'), 'primary');
+  button('REPETIR TUTORIAL', cx - 130, y0 + 212, 260, 44, startTutorial);
+  button('MENU', cx - 130, y0 + 266, 260, 44, () => setState('menu'));
+  ctx.restore();
+}
 
 /* --------------------------- TREINAMENTO: TREINAMENTO | BOTS ------------ */
 function drawTrain(t) {
@@ -1682,9 +1826,10 @@ function drawTrain(t) {
   const y = y0 + ts + 28;
   [['SOLITÁRIO', () => { soloSetup = true; setState('setup'); }], ['BOTS', () => { soloSetup = false; cfg.team = 0; saveCfg(); setState('setup'); }]].forEach(([label, fn], i) => {   // mesmo estilo dos cartões de mapa
     const x = x0 + i * (cw + gap), hov = input.mx > x * k && input.mx < (x + cw) * k && input.my > y * k && input.my < (y + ch) * k;
-    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, cw - 1, ch - 1, 16); ctx.fillStyle = hov ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.03)'; ctx.fill();
+    const gr = ctx.createLinearGradient(x, y, x, y + ch); gr.addColorStop(0, hov ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.05)'); gr.addColorStop(1, hov ? 'rgba(255,255,255,.03)' : 'rgba(255,255,255,.012)');   // mesmo fundo dos cartões 1v1..4v4
+    ctx.beginPath(); ctx.roundRect(x + .5, y + .5, cw - 1, ch - 1, 18); ctx.fillStyle = gr; ctx.fill();
     ctx.strokeStyle = hov ? INK : 'rgba(255,255,255,.14)'; ctx.lineWidth = hov ? 2 : 1; ctx.stroke();
-    txt(label, x + cw / 2, y + ch / 2 + 1, clamp(cw / 10, 14, 22), hov ? INK : MUTE, 'center');
+    txt(label, x + cw / 2, y + ch / 2 + 1, clamp(cw / 10, 14, 22), hov ? INK : 'rgba(231,228,211,.8)', 'center');
     ui.push({ x: x * k, y: y * k, w: cw * k, h: ch * k, fn });
   });
   cornerBtn('VOLTAR', -1, IW, IH, () => setState('menu'));
@@ -1704,7 +1849,7 @@ function drawModes(t) {
   const ls = v => { try { ctx.letterSpacing = v + 'px'; } catch (e) {} };
   ls(Math.round(ts * .2)); txt('ESCOLHER MODO', cx + ts * .1, y0 + ts / 2, ts, INK, 'center'); ls(0);
   let tip = null;
-  const TIPS = { c: 'Sala personalizada: todas as opções liberadas (modo, pontos, bots, tempo, armas e dificuldade). Todos contra todos.', j: 'Entrar na sala de um amigo usando o código de 4 dígitos.', tr: 'Treinamento solitário ou contra bots.', soon: 'Em breve.' };
+  const TIPS = { c: 'Sala personalizada: todas as opções liberadas (modo, pontos, bots, tempo, armas e dificuldade). Todos contra todos.', j: 'Entrar na sala de um amigo usando o código de 4 dígitos.', tr: 'Treinamento solitário ou contra bots.', soon: 'Em breve.', bg: 'Campo de batalha: sala com todas as opções liberadas. Todos entram para lutar uns contra os outros, cada um por si. A partida começa quando todos estiverem prontos.', tut: 'Tutorial: aprenda a jogar passo a passo (mover, mirar, socar, armas, cobertura e arremesso).' };
   for (let q = 1; q <= 4; q++) TIPS[q] = `Clássico · 3 MIN · ${q > 1 ? `você + ${q - 1} aliado${q > 2 ? 's' : ''}` : 'você'} contra ${q} inimigo${q > 1 ? 's' : ''}. Amigos online entram em times opostos.`;
   const over = (x, yy, w, h) => input.mx > x * k && input.mx < (x + w) * k && input.my > yy * k && input.my < (yy + h) * k;
   const frame = (x, yy, w, h, hov, r) => {
@@ -1731,6 +1876,15 @@ function drawModes(t) {
     ctx.beginPath(); ctx.roundRect(x + w - 88, yy + 14, 72, 22, 11); ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.stroke(); txt('EM BREVE', x + w - 52, yy + 26, 10, MUTE, 'center');
     ls(2); txt(label, x + 20, yy + h - 28, clamp(w / 20, 14, 22), 'rgba(138,138,150,.9)', 'left'); ls(0);
     if (hov) tip = TIPS.soon;
+  };
+  const card = (label, sub, x, yy, w, h, fn, tp, kind) => {   // cartão grande ativo (CAMPO DE BATALHA / TUTORIAL)
+    const hov = over(x, yy, w, h); frame(x, yy, w, h, hov, 18);
+    const ix = x + w - 46, iy = yy + 46, r = 17; ctx.strokeStyle = hov ? INK : 'rgba(231,228,211,.5)'; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, r, 0, TAU);
+    if (kind === 'bg') { ctx.moveTo(ix - r - 7, iy); ctx.lineTo(ix - 6, iy); ctx.moveTo(ix + 6, iy); ctx.lineTo(ix + r + 7, iy); ctx.moveTo(ix, iy - r - 7); ctx.lineTo(ix, iy - 6); ctx.moveTo(ix, iy + 6); ctx.lineTo(ix, iy + r + 7); ctx.stroke(); }
+    else { ctx.stroke(); ctx.beginPath(); ctx.moveTo(ix - 5, iy - 8); ctx.lineTo(ix + 9, iy); ctx.lineTo(ix - 5, iy + 8); ctx.closePath(); ctx.fill(); }
+    ls(2); txt(label, x + 20, yy + h - 46, clamp(w / 20, 14, 22), hov ? INK : 'rgba(231,228,211,.85)', 'left'); ls(0);
+    txt(sub, x + 20, yy + h - 22, clamp(w / 34, 9, 12), MUTE, 'left');
+    if (hov) tip = tp; ui.push({ x: x * k, y: yy * k, w: w * k, h: h * k, fn });
   };
   const bar = (label, x, yy, w, h, fn, isSoon) => {
     if (!isSoon) { button(label, x, yy, w, h, fn); if (over(x, yy, w, h)) tip = label === 'ENTRAR' ? TIPS.j : label === 'TREINO' ? TIPS.tr : null; return; }
@@ -1760,15 +1914,15 @@ function drawModes(t) {
   mode(2, xb, y, wb, h2); mode(4, xb, y + h2 + g, wb, h4);
   // direita: CAMPO DE BATALHA e TUTORIAL (vira TREINO), começam acima do 2v2 e terminam abaixo do 4v4
   const gtot = gh + 2 * ext, hb = (gtot - g) * .5, ty0 = y - ext + hb + g, th0 = gtot - g - hb;
-  soon('CAMPO DE BATALHA', xr, y - ext, WR, hb);
+  card('CAMPO DE BATALHA', 'TODOS CONTRA TODOS', xr, y - ext, WR, hb, () => { soloSetup = false; bgSetup = true; cfg.team = 0; saveCfg(); setState('setup'); }, TIPS.bg, 'bg');
   step(FLIP.t, over(xr, ty0, WR, th0));
-  if (!FLIP.t.m) soon('TUTORIAL', xr, ty0, WR, th0);
-  else { frame(xr, ty0, WR, th0, true, 18); ls(2); txt('TREINO', xr + 20, ty0 + th0 - 28, clamp(WR / 20, 14, 22), INK, 'left'); ls(0); tip = TIPS.tr; ui.push({ x: xr * k, y: ty0 * k, w: WR * k, h: th0 * k, fn: () => setState('train') }); }
+  if (!FLIP.t.m) card('TUTORIAL', 'APRENDA A JOGAR', xr, ty0, WR, th0, startTutorial, TIPS.tut, 'tut');
+  else { frame(xr, ty0, WR, th0, true, 18); { const ix = xr + WR - 46, iy = ty0 + 46; ctx.strokeStyle = INK; ctx.fillStyle = INK; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, 17, 0, TAU); ctx.moveTo(ix + 9.5, iy); ctx.arc(ix, iy, 9.5, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.arc(ix, iy, 3.2, 0, TAU); ctx.fill(); } ls(2); txt('TREINO', xr + 20, ty0 + th0 - 28, clamp(WR / 20, 14, 22), INK, 'left'); ls(0); tip = TIPS.tr; ui.push({ x: xr * k, y: ty0 * k, w: WR * k, h: th0 * k, fn: () => setState('train') }); }
   // abas embaixo dos cartões
   const by = y + gh + g, byr = y + gh + ext + g, gt = 8, bw = (wa - gt) / 2, bw2 = (WR - g) / 2;   // abas da esquerda: só sob a pílula, menores e mais juntas
   tab('PERSONALIZADA', x0, by, bw, !FLIP.c.m, FLIP.c.m ? 0 : FLIP.c.p, go(0), TIPS.c);
   tab('ENTRAR', x0 + bw + gt, by, bw, !!FLIP.c.m, FLIP.c.m ? FLIP.c.p : 0, join, TIPS.j);
-  tab('TUTORIAL', xr, byr, bw2, !FLIP.t.m, FLIP.t.m ? 0 : FLIP.t.p, null, TIPS.soon);
+  tab('TUTORIAL', xr, byr, bw2, !FLIP.t.m, FLIP.t.m ? 0 : FLIP.t.p, startTutorial, TIPS.tut);
   tab('TREINO', xr + bw2 + g, byr, bw2, !!FLIP.t.m, FLIP.t.m ? FLIP.t.p : 0, () => setState('train'), TIPS.tr);
   cornerBtn('VOLTAR', -1, IW, IH, () => setState('menu'));
   if (tip) {   // balão perto do mouse com a descrição do modo
@@ -2235,6 +2389,23 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 53, v: '0.30.0', title: 'Campo de batalha e tutorial',
+    criado: [
+      'CAMPO DE BATALHA agora funciona: abre a mesma configuração da sala personalizada (modo, pontos, dificuldade, bots, tempo e armas), com a opção de 0 bots para jogar só entre pessoas.',
+      'Depois de CRIAR SALA, todos entram no lobby para lutar uns contra os outros, cada um por si. Quando todos estiverem em PRONTO, uma contagem de 3 segundos começa e a partida inicia sozinha (votação de mapa e escolha de personagem como nas outras salas). Se alguém cancelar o pronto ou entrar na sala, a contagem para.',
+      'TUTORIAL agora funciona, no mapa DOCAS, em 10 passos: mover, mirar, socar, pegar arma, atirar, recarregar, arremessar, cobertura, espiar e uma prova final contra um bot fácil. Cada passo só avança quando você faz a ação; o alvo aparece marcado em amarelo e o painel mostra as teclas (ou botões, no celular). ENTER ou o botão PULAR pula o passo.',
+      'No tutorial você não morre (a vida enche de novo) e o boneco de treino nunca cai. Ao terminar, aparece a tela TUTORIAL CONCLUÍDO com JOGAR, REPETIR TUTORIAL e MENU.',
+    ],
+    modificado: ['Os cartões CAMPO DE BATALHA e TUTORIAL da tela ESCOLHER MODO deixaram de ser EM BREVE e agora são clicáveis. O TUTORIAL continua virando TREINO ao segurar o mouse em cima.'] },
+  { n: 52, v: '0.29.2', title: 'Cartões do treinamento iguais aos dos modos',
+    modificado: [
+      'Os cartões SOLITÁRIO e BOTS agora usam o mesmo fundo dos cartões 1v1, 2v2, 3v3 e 4v4: um degradê suave que começa mais claro em cima e escurece embaixo, com a mesma borda arredondada, o mesmo destaque ao passar o mouse e a mesma cor de texto.',
+    ],
+    removido: ['O brilho redondo atrás dos cartões do treinamento, que entrou na versão 0.29.1.'] },
+  { n: 51, v: '0.29.1', title: 'Fundo iluminado no treinamento',
+    modificado: [
+      'A tela TREINAMENTO (SOLITÁRIO e BOTS) agora tem o mesmo fundo da votação de mapa: um preto iluminado, com um brilho suave atrás de cada cartão (mais forte quando o mouse está em cima), em vez de uma cor só.',
+    ] },
   { n: 50, v: '0.29.0', title: 'Atributos dos personagens',
     criado: [
       'Cada personagem agora tem 7 atributos com nota de 1 a 10, pensados no jeito de cada um: VELOCIDADE, AGILIDADE, VIDA, RESISTÊNCIA, FORÇA, CONTROLE e RECARGA. Os 8 personagens atuais têm perfis bem diferentes (tanque lento, velocista frágil, atiradora precisa, brigão forte, assassino ágil, muro resistente, soldado metódico e caótico imprevisível), todos com a mesma soma de pontos, então ninguém é melhor em tudo.',
@@ -2800,8 +2971,8 @@ const roomSync = () => netAll({ t: 'room', players: NET.players, snap: NET.snap 
 function netAbort(err) { netReset(); NET.err = err; setState('join'); }
 function leaveRoom() { const h = NET.host; netReset(); setState(h ? 'setup' : 'modes'); }
 function createRoom() {
-  netReset(); Object.assign(NET, { host: true, err: '', msg: 'CRIANDO SALA...', busy: true, me: 'host', cap: cfg.team > 0 ? cfg.team * 2 : 8,
-    snap: { team: cfg.team, mode: cfg.mode, pts: cfg.pts, time: cfg.time, loot: cfg.loot, diff: cfg.diff, bots: cfg.bots }, players: [{ id: 'host', char: cfg.char, ready: false, team: -1 }] });
+  netReset(); Object.assign(NET, { bgT: 0, host: true, err: '', msg: 'CRIANDO SALA...', busy: true, me: 'host', cap: cfg.team > 0 ? cfg.team * 2 : 8,
+    snap: { team: cfg.team, mode: cfg.mode, pts: cfg.pts, time: cfg.time, loot: cfg.loot, diff: cfg.diff, bots: cfg.bots, bg: bgSetup ? 1 : 0, rn: (cfg.roomName || '').trim().slice(0, 16) }, players: [{ id: 'host', char: cfg.char, ready: false, team: -1 }] });
   setState('room');
   if (typeof Peer === 'undefined') { NET.err = 'SEM CONEXÃO COM O SERVIDOR ONLINE'; NET.busy = false; return; }
   openRoom(0);
@@ -2872,6 +3043,21 @@ function toggleReady() {
   const me = NET.players.find(p => p.id === NET.me); if (!me) return;
   if (NET.snap && NET.snap.team > 0 && !(me.team >= 0)) return;   // sem time não dá para ficar pronto
   if (NET.host) { me.ready = !me.ready; roomSync(); } else netSend(NET.conns.host, { t: 'ready', v: !me.ready });
+}
+function bgStatus() {   // texto de estado do lobby do CAMPO DE BATALHA
+  const s = NET.snap || {}, n = NET.players.length, rc = NET.players.filter(p => p.ready).length;
+  if (s.cd > 0) return { t: 'COMEÇANDO EM ' + s.cd + '...', c: '#8fd6a4' };
+  if (n + (s.bots || 0) < 2) return { t: 'PRECISA DE PELO MENOS 2 LUTADORES', c: '#ffd23f' };
+  return { t: `AGUARDANDO TODOS FICAREM PRONTOS (${rc}/${n})`, c: '#8a8a96' };
+}
+function bgTick(dt) {   // anfitrião: todos prontos -> contagem de 3 s -> seleção de mapa e personagem
+  if (!NET.host || !NET.snap || !NET.snap.bg || NET.sel || NET.online || NET.err || NET.busy) return;
+  const n = NET.players.length, ok = n > 0 && NET.players.every(p => p.ready) && n + (NET.snap.bots || 0) >= 2;
+  if (!ok) { if (NET.bgT) { NET.bgT = 0; NET.snap.cd = 0; roomSync(); } return; }
+  if (!NET.bgT) NET.bgT = 3;
+  NET.bgT -= dt; const cd = Math.max(0, Math.ceil(NET.bgT));
+  if (NET.bgT <= 0) { NET.bgT = 0; NET.snap.cd = 0; startRoom(); return; }
+  if (NET.snap.cd !== cd) { NET.snap.cd = cd; roomSync(); }
 }
 function startRoom() {
   if (!NET.host || !NET.players.length || !NET.players.every(p => p.ready && (NET.snap.team <= 0 || p.team >= 0))) return;
@@ -3184,10 +3370,11 @@ function drawRoom(t) {
   const k = ctx.getTransform().a / (devicePixelRatio || 1), pw = Math.min(IW - 40, 460), px = cx - pw / 2, rh = 38, rg = 5, cap = NET.cap || 8, snap = NET.snap || {};
   const me = NET.players.find(p => p.id === NET.me), n = NET.players.length, rc = NET.players.filter(p => p.ready).length, all = n > 0 && rc === n && !NET.err;
   const teamRoom = snap.team > 0, rowsH = teamRoom ? 34 + 28 + snap.team * (rh + rg) + 28 : cap * (rh + rg);
-  let y = Math.max(10, (IH - (30 + 22 + 84 + rowsH + 10 + (NET.host ? 3 : 2) * 58)) / 2);
-  try { ctx.letterSpacing = '6px'; } catch (e) {}
-  txt('SALA', cx + 3, y + 15, 30, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
-  txt(snap.team > 0 ? `PARTIDA ${snap.team}v${snap.team}` : 'SALA PERSONALIZADA', cx, y + 42, 12, MUTE, 'center'); y += 58;
+  let y = Math.max(10, (IH - (30 + 22 + 84 + rowsH + 10 + ((NET.host && !snap.bg) ? 3 : 2) * 58 + (snap.bg ? 34 : 0))) / 2);
+  const rtl = (snap.rn || 'SALA').toUpperCase(), rfs = clamp((IW - 30) / (rtl.length * .8), 14, 30);
+  try { ctx.letterSpacing = Math.round(rfs * .2) + 'px'; } catch (e) {}
+  txt(rtl, cx + rfs * .1, y + 15, rfs, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
+  txt(snap.team > 0 ? `PARTIDA ${snap.team}v${snap.team}` : snap.bg ? 'CAMPO DE BATALHA · TODOS CONTRA TODOS' + (snap.bots ? ` · ${snap.bots} BOTS` : '') : 'SALA PERSONALIZADA', cx, y + 42, 12, MUTE, 'center'); y += 58;
   if (NET.err) txt(NET.err, cx, y + 28, 16, '#ff6b6b', 'center');
   else if (NET.busy || !NET.code) txt(NET.msg || '...', cx, y + 28, 16, MUTE, 'center');
   else { try { ctx.letterSpacing = '14px'; } catch (e) {} txt(NET.code, cx + 7, y + 26, 54, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
@@ -3204,8 +3391,8 @@ function drawRoom(t) {
       txt(`${mem.length}/${n2}`, x0 + cw - 4, y + 8, 12, col, 'right');
       ctx.fillStyle = col; ctx.fillRect(x0, y + 20, cw, 2);
       for (let i = 0; i < n2; i++) {
-        const q = mem[i], ry = y + 28 + i * (rh + rg), tint = t2 ? 'rgba(255,122,107,.07)' : 'rgba(143,214,164,.07)';
-        ctx.beginPath(); ctx.roundRect(x0 + .5, ry + .5, cw - 1, rh - 1, 10); ctx.fillStyle = tint; ctx.fill(); ctx.strokeStyle = q && q.ready ? col : 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
+        const q = mem[i], ry = y + 28 + i * (rh + rg), tint = 'rgba(255,255,255,.03)';
+        ctx.beginPath(); ctx.roundRect(x0 + .5, ry + .5, cw - 1, rh - 1, 10); ctx.fillStyle = tint; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke();
         if (!q) {
           if (me && me.team !== t2 && !NET.err) button('+ ENTRAR NO TIME', x0 + 6, ry + 5, cw - 12, rh - 10, () => chooseTeam(t2));
           else txt('VAGA', x0 + 14, ry + rh / 2 + 1, 12, '#4a4a56', 'left');
@@ -3235,7 +3422,8 @@ function drawRoom(t) {
     if (canKick) button('EXPULSAR', px + pw - 90, ry + 5, 82, rh - 10, () => kickPlayer(p.id));
   }
   y += (teamRoom ? 0 : rowsH) + 10; const bw = Math.min(300, pw);
-  if (NET.host) { button('INICIAR PARTIDA', cx - bw / 2, y, bw, 50, startRoom, all ? 'primary' : undefined); y += 58; }
+  if (snap.bg) { const st = bgStatus(); txt(st.t, cx, y + 12, 13, st.c, 'center'); y += 34; }
+  else if (NET.host) { button('INICIAR PARTIDA', cx - bw / 2, y, bw, 50, startRoom, all ? 'primary' : undefined); y += 58; }
   if (!NET.err && me && (!teamRoom || me.team >= 0)) { button(me.ready ? 'CANCELAR PRONTO' : 'PRONTO', cx - bw / 2, y, bw, 50, toggleReady, me.ready ? undefined : 'primary'); y += 58; }
   button('SAIR DA SALA', cx - bw / 2, y, bw, 50, leaveRoom);
   ctx.restore();
@@ -3266,7 +3454,7 @@ function loop(now) {
   else if (state === 'maps') { menuT += dt; drawMaps(menuT); }
   else if (state === 'setup') { menuT += dt; drawSetup(menuT); }
   else if (state === 'pick') { menuT += dt; if (NET.host) selStep(rdt); else if (NET.sel) NET.sel.t = Math.min(NET.sel.dur, NET.sel.t + rdt); drawPick(menuT); }
-  else if (state === 'room') { menuT += dt; drawRoom(menuT); }
+  else if (state === 'room') { menuT += dt; bgTick(rdt); drawRoom(menuT); }
   else if (state === 'join') { menuT += dt; drawJoin(menuT); }
   else if (state === 'options') { menuT += dt; drawOptions(menuT); }
   else if (state === 'menu') { menuT += dt; drawMenu(menuT); }
@@ -3278,7 +3466,7 @@ function loop(now) {
     if (hitStop > 0) { hitStop -= dt; dt = 0; }   // hit stop no impacto do soco
     if (NET.cl) clientStep(rdt);
     else {
-    let frozen = state === 'pause' && !NET.online;   // pausado: tudo congelado
+    let frozen = (state === 'pause' || state === 'tutend') && !NET.online;   // pausado: tudo congelado
     if (!frozen && M && !training) { const r = stepMatch(dt); if (r < 0) frozen = true; else dt = r; }   // contagem, rodadas e relógio
     if (frozen) { input.interact = input.throwReq = input.reloadReq = input.coverReq = input.down = false; } else updatePlay(dt);
     }
@@ -3306,6 +3494,7 @@ function loop(now) {
     drawHUD(menuT);
     if (state === 'dead') drawDead();
     if (state === 'pause') drawPause();
+    if (state === 'tutend') drawTutEnd();
     if (state === 'mend' && M) drawMatchEnd();
   }
   if (TOUCH && state === 'play' && innerHeight > innerWidth) {   // pede para girar o celular
