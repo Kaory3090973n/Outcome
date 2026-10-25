@@ -178,7 +178,7 @@ const WEAPONS = {
     dmg: 34, rate: .4, swingDur: .3, range: 64, vis: 1.4, mag: 0, reserve: 0, spread: 0, pellets: 1, speed: 0, life: 0, reload: 0, kick: 0, pref: 46,
     gripR: [-2, 2], gripL: [4, -2], muzzle: 0,
     side: [[0,0,26,11,'#2f7a3c',3.6],[0,-4.2,24,2,'#7fd69a',.8],[24,0,16,5,'#2f7a3c',2],[38,0,3,6,'#d4a72c',1],[7,0,12,7,'#e8e4d0',1.2]],
-    parts: [[-6,0,22,11,'#2f7a3c',4],[-5,-4,20,2.2,'#7fd69a',.8],[14,0,16,5,'#2f7a3c',2],[28,0,3,6.4,'#d4a72c',1],[-1,0,10,7.4,'#e8e4d0',1.2]] },
+    parts: [[-11,0,3,6.4,'#d4a72c',1],[-9,0,19,5,'#2f7a3c',2],[8,0,26,11,'#2f7a3c',4],[10,-4,22,2.2,'#7fd69a',.8],[14,0,10,7.4,'#e8e4d0',1.2]] },   // segurada pelo gargalo (mão no pescoço fino, corpo da garrafa na frente)
 };
 /* Sprites desenhados por caminho (iguais às artes de referência), usados em partida: na mão, arremessada, deslizando e no chão.
    Coordenadas da arma: x para a frente, a mão segura perto de x = 0. A tela ARMAS continua usando as silhuetas. */
@@ -214,6 +214,17 @@ const WEAPONS = {
   WEAPONS.crowbar.bb = [-18.5, -9.8, 53.5, 9.8];
   WEAPONS.crowbar.parts = [[-16, 0, 68, 14, '#0000', 0]];
   WEAPONS.crowbar.extra = null;
+}
+/* TAMANHO REAL: len = comprimento da arma no mundo (unidades), proporcional ao tamanho real (cm). Vale na mão, no chão, arremessada e no deslize.
+   A tela ARMAS e o HUD do canto inferior direito usam as silhuetas e não seguem isto. */
+{
+  const LEN = { glock: 28, beretta: 32, m1911: 32, python: 38, deagle: 40, sawed: 46,
+    knuckles: 14, pocket: 26, butterfly: 26, cleaver: 38, bottle: 36, wrench: 46, crowbar: 72, sledge: 78 };   // mesmo tamanho na mão, no ar (arremessada) e no chão   // 10, 20, 22, 30, 30, 45, 76 e 90 cm
+  for (const k in LEN) {
+    const w = WEAPONS[k]; w.len = LEN[k]; if (w.knuckle) continue;   // soco-inglês: desenhado na mão do personagem, só o chão usa len
+    const mn = Math.min(...w.parts.map(q => q[0])), mx = Math.max(...w.parts.map(q => q[0] + q[2])), v = LEN[k] / (mx - mn);
+    w.vis = v; if (!w.melee) w.muzzle *= v;   // o cano acompanha a escala
+  }
 }
 /* Ordem da tela ARMAS: brancas da mais fraca à mais forte, depois as de fogo da mais forte à mais fraca (as mais fracas dos dois tipos ficam juntas, ao lado do retângulo do meio) */
 const WKEYS = [
@@ -456,9 +467,13 @@ const touch = { move: { id: null, ox: 0, oy: 0, x: 0, y: 0, dx: 0, dy: 0 }, aim:
 const uiScale = () => clamp(Math.min(innerHeight / 640, innerWidth / 560), .5, 1);   // menus se encolhem em telas pequenas
 let VW = 0, VH = 0, WW = 0, WH = 0, logScroll = 0;   // tamanho do mundo (em unidades) e arma selecionada na tela de info
 let player, bots = [], bullets = [], pickups = [], decals = [], casings = [], crates = [];
+let puddles = [], prints = [];   // poças de sangue acumulado e pegadas (sangue / água)
+const pools = new Map();         // poças de água do mapa (registradas pelo desenho do cenário)
 let trail = [], rings = [], sparks = [], thrown = [], btrails = [], btClock = 0;   // btrails: rastros das balas (somem aos poucos)
 let shake = 0, hitStop = 0, dmgFlash = 0, kills = 0, pickupTimer = 8, showHit = false, menuT = 0;
 let ui = [], vignette, scan, fog;
+let cmbN = 0, cmbT = 0, cmbPop = 0, cmbAge = 0, killT = -1;   // combo de acertos (branco) e animação de abate (vermelho)
+const KILL_DUR = 1.8;
 const BTRAIL_LIFE = .45;   // tempo (s) que cada ponto do rastro da bala leva para sumir
 const MAPK = 2.2, cam = { x: 0, y: 0 };   // mapa = MAPK x a área visível; cam = canto superior esquerdo da câmera (em unidades do mundo)
 const input = { keys: {}, mx: 0, my: 0, down: false, buffer: 0, reloadReq: false, interact: false, throwReq: false, coverReq: false, slideReq: false, holsterReq: false, peek: false };
@@ -708,7 +723,7 @@ function freeSpot(minDist = 0, from = null) {
   }
   return { x: 60, y: 60 };
 }
-const holdX = w => C.holdReach - w.gripR[0];   // x (local) da origem da arma: a mão direita fica em holdReach
+const holdX = w => C.holdReach - w.gripR[0] * (w.vis || 1);   // x (local) da origem da arma: a mão direita fica em holdReach
 const toWorld = (f, lx, ly) => { const c = Math.cos(f.angle), s = Math.sin(f.angle); return { x: f.x + lx*c - ly*s, y: f.y + lx*s + ly*c }; };
 
 function spawnBot(b) {
@@ -732,7 +747,7 @@ function updateCam() {   // câmera presa ao personagem (para só nas bordas do 
 function startGame(tr, keepKills) {
   training = tr === true; trainT = 0; if (training) { curMap = MAPS[cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map]; buildCrates(); }   // solitário: mapa escolhido (ALEATÓRIO sorteia)
   if (training) { M = null; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); }
-  decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; if (!keepKills) kills = 0; dmgFlash = 0;
+  decals = []; puddles = []; prints = []; pools.clear(); thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; if (!keepKills) kills = 0; dmgFlash = 0; cmbN = cmbT = cmbPop = 0; killT = -1;
   const c = freeSpot();
   const sp = curMap ? curMap.spawn : [.5, .4];
   player = makeFighter({ x: WW * sp[0], y: WH * sp[1], isPlayer: true, pid: 0,
@@ -837,6 +852,13 @@ function fistLocal(f, hand) {
   const swing = p.t < 0 ? -Math.sin(f.walk + (side > 0 ? Math.PI : 0)) * 6 * sp : 0; // braços balançam ao andar
   return { x: 11 + reach * ext + swing, y: side * 13 * (1 - .9 * Math.max(ext, 0)), ext };
 }
+/* Extensão do braço no golpe corpo a corpo: em repouso o braço fica encolhido (segurando junto ao corpo); ao bater, recua um pouco e estica até o fim do braço */
+function meleeExt(f) {
+  const t = f.swing; if (t < 0) return 0;
+  if (t < .18) return -.2 * (t / .18);
+  if (t < .5) return -.2 + 1.2 * easeOutExpo((t - .18) / .32);
+  return 1 - easeInOut((t - .5) / .5);
+}
 /* Rotação do machado: arma recuada -> preparo -> corte rápido -> retorno */
 function swingRot(f) {
   const t = f.swing, rest = -.8;
@@ -850,22 +872,123 @@ function swingRot(f) {
 const lefty = f => !!(f.pal && f.pal.hand === 'L'), domHand = f => lefty(f) ? 'left' : 'right';
 const enemiesOf = f => [player, ...bots].filter(o => o !== f && !o.dead && o.team !== f.team);   // inimigos (aliados não levam dano)
 
-function damage(t, dmg, ang, src) {
+function damage(t, dmg, ang, src, kind) {
   if (t.dead) return;
   if (TUT) tutDamage(t, dmg, src);
+  if (src && src.isPlayer && !t.isPlayer && src.team !== t.team) { if (cmbN === 0) cmbAge = 0; cmbN++; cmbT = 4; cmbPop = 1; }   // acerto do jogador soma no combo
+  if (t.isPlayer) { cmbN = 0; cmbT = 0; }   // levou dano: o combo some
   t.hp -= dmg; t.hitFlash = .1;
   t.vx += Math.cos(ang) * 90 * t.mTgh; t.vy += Math.sin(ang) * 90 * t.mTgh;
   for (let i = 0; i < 3; i++) addDecal(t.x + rnd(-10, 10) + Math.cos(ang) * 10, t.y + rnd(-10, 10) + Math.sin(ang) * 10, rnd(2, 5));
   if (t.isPlayer) { dmgFlash = .45; shake = Math.max(shake, 5); }
-  if (t.hp <= 0) kill(t, src);
+  if (t.hp <= 0) kill(t, src); else if (kind) bleedHit(t, kind, src);
 }
-function addDecal(x, y, r) { decals.push({ x, y, r, a: rnd(.35, .7) }); if (decals.length > 260) decals.shift(); }
+/* ------------------------- SANGRAMENTO, POÇAS E PEGADAS ------------------------- */
+/* Cada tipo de golpe sangra de um jeito: ping = intervalo entre pingos (s), dur = duração (s), dps = vida perdida por segundo,
+   r0/r1 = tamanho do pingo, sev = gravidade (um sangramento mais grave não é trocado por um mais leve), cap = raio máximo da poça,
+   gate = só sangra de verdade com vida abaixo dessa fração (hemorragia interna). */
+const BLEED = {
+  gun:   { ping: .4, dur: 4, dps: 1.2, r0: 2,   r1: 3.6, sev: 2, cap: 15 },              // pistola / tiro direto: médio
+  cut:   { ping: .2, dur: 6, dps: 2.6, r0: 3,   r1: 6.5, sev: 3, cap: 28 },              // arma branca cortante: brutal, pingo maior
+  blunt: { ping: .8, dur: 6, dps: .8,  r0: 2,   r1: 3.4, sev: 1, cap: 11, gate: .3 },    // arma branca de impacto: interno, só com vida < 30%
+  fist:  { ping: .6, dur: 3, dps: 0,   r0: 1.6, r1: 2.6, sev: 0, cap: 7 },               // soco: só pinga após 3+ socos seguidos, sem perda de vida
+};
+const CUT_W = { cleaver: 1, pocket: 1, butterfly: 1, bottle: 1 }, BLUNT_W = { crowbar: 1, wrench: 1, sledge: 1, knuckles: 1 };
+const weaponKind = k => CUT_W[k] ? 'cut' : BLUNT_W[k] ? 'blunt' : 'fist';
+const POOL_BIG = 10;   // raio a partir do qual uma poça de sangue encharca a sola
+function bleedHit(t, kind, src) {
+  if (t.dummy || t.dead) return;
+  if (kind === 'fist') { t.fistT = 3; t.fistN = (t.fistN || 0) + 1; if (t.fistN < 3) return; }   // soco: precisa de 3+ seguidos
+  const B = BLEED[kind], cur = t.bleed;
+  if (cur && BLEED[cur.kind].sev > B.sev) return;
+  if (cur && cur.kind === kind) { cur.t = Math.max(cur.t, B.dur); cur.src = src; }
+  else t.bleed = { kind, t: B.dur, ping: 0, src };
+}
+const stopBleed = f => { f.bleed = null; };   // gancho para a futura Bandagem
+function bleedPing(f, B, kind) {
+  const r = rnd(B.r0, B.r1) * (kind === 'cut' && Math.random() < .35 ? 1.5 : 1);   // cortes às vezes soltam um pingo maior
+  if ((f.still || 0) > 1.5) {   // parado há mais de 1,5 s: os pingos se fundem na mesma posição e a poça cresce
+    let p = puddles.find(q => q.owner === f && Math.hypot(q.x - f.x, q.y - f.y) < 13);
+    if (!p) {
+      p = { x: f.x, y: f.y, r: 3 + r * .6, cap: B.cap, owner: f, lobes: Array.from({ length: 4 }, () => ({ a: rnd(0, TAU), d: rnd(.2, .55), k: rnd(.55, .85) })) };
+      puddles.push(p); if (puddles.length > 40) puddles.shift();
+    }
+    p.cap = Math.max(p.cap, B.cap);
+    p.r = Math.min(p.cap, p.r + (.3 + B.sev * .3) * (1 + Math.min(f.still - 1.5, 6) * .2));   // mais tempo parado + ferida mais grave = poça maior
+    return;
+  }
+  addDecal(f.x + rnd(-3, 3), f.y + rnd(-3, 3), r);
+}
+function updateBlood(dt) {
+  for (const f of [player, ...bots]) {
+    if (!f || f.dead) continue;
+    const spd = Math.hypot(f.vx, f.vy);
+    f.still = spd < 25 ? (f.still || 0) + dt : 0;
+    if (f.fistT > 0) { f.fistT -= dt; if (f.fistT <= 0) f.fistN = 0; }
+    const b = f.bleed;
+    if (b) {
+      const B = BLEED[b.kind]; b.t -= dt;
+      if (!B.gate || f.hp < f.maxHp * B.gate) {
+        if (B.dps) { f.hp -= B.dps * dt; if (f.hp <= 0) { f.bleed = null; kill(f, b.src); continue; } }
+        b.ping -= dt; if (b.ping <= 0) { b.ping += B.ping; bleedPing(f, B, b.kind); }
+      }
+      if (b.t <= 0) f.bleed = null;
+    }
+    footSteps(f, dt, spd);
+  }
+}
+/* Pegadas: poça grande (sangue acumulado ou água) encharca a sola = 5 a 7 pegadas que vão esmaecendo até sumir.
+   Sangue pouco líquido sujou só de leve = 1 ou 2 pegadas fracas. */
+function footSteps(f, dt, spd) {
+  const ft = f.ft || (f.ft = { kind: null, tot: 0, k: 0, big: false, rgb: '', cool: 0, d: 0, side: 1 });
+  ft.cool = Math.max(0, ft.cool - dt);
+  if (f.slideT <= 0) {
+    let big = null;
+    for (const p of puddles) if (p.r >= POOL_BIG && Math.hypot(f.x - p.x, f.y - p.y) < p.r) { big = { kind: 'blood', rgb: '120,8,28' }; break; }
+    if (!big) for (const w of pools.values()) { const dx = (f.x - w.x) / w.rx, dy = (f.y - w.y) / w.ry; if (dx * dx + dy * dy < 1) { big = { kind: 'water', rgb: w.rgb }; break; } }
+    if (big) {
+      if (ft.k >= ft.tot || !ft.big || ft.kind !== big.kind) { ft.kind = big.kind; ft.rgb = big.rgb; ft.big = true; ft.tot = 5 + (Math.random() * 3 | 0); }
+      ft.k = 0;   // enquanto pisa na poça a sola continua encharcada
+    } else if (ft.k >= ft.tot && ft.cool <= 0 && spd > 40) {
+      for (const d of decals) if (Math.hypot(f.x - d.x, f.y - d.y) < d.r + 5) { ft.kind = 'blood'; ft.rgb = '120,8,28'; ft.big = false; ft.tot = 1 + (Math.random() * 2 | 0); ft.k = 0; ft.cool = .6; break; }
+    }
+  }
+  if (f.slideT > 0 || spd < 40) return;
+  ft.d += spd * dt;
+  if (ft.d < 17) return;
+  ft.d -= 17; ft.side = -ft.side;
+  if (ft.k >= ft.tot) return;
+  const ang = Math.atan2(f.vy, f.vx), base = ft.kind === 'water' ? .5 : ft.big ? .8 : .3;
+  const al = base * Math.pow(1 - ft.k / ft.tot, 1.25);   // 1ª pegada forte, última quase some
+  prints.push({ x: f.x + Math.cos(ang + 1.5708) * 5 * ft.side - Math.cos(ang) * 3, y: f.y + Math.sin(ang + 1.5708) * 5 * ft.side - Math.sin(ang) * 3, rot: ang, a: al, rgb: ft.rgb });
+  if (prints.length > 320) prints.shift();
+  ft.k++;
+}
+function drawBlood() {
+  const x0 = cam.x - 40, y0 = cam.y - 40, x1 = cam.x + VW + 40, y1 = cam.y + VH + 40;
+  for (const p of puddles) {
+    if (p.x < x0 || p.y < y0 || p.x > x1 || p.y > y1) continue;
+    ctx.fillStyle = 'rgba(105,6,24,.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, TAU);
+    for (const l of p.lobes) { const lx = p.x + Math.cos(l.a) * p.r * l.d, ly = p.y + Math.sin(l.a) * p.r * l.d, lr = p.r * l.k; ctx.moveTo(lx + lr, ly); ctx.arc(lx, ly, lr, 0, TAU); }
+    ctx.fill();
+    ctx.fillStyle = 'rgba(190,24,48,.32)'; ctx.beginPath(); ctx.arc(p.x - p.r * .15, p.y - p.r * .2, p.r * .5, 0, TAU); ctx.fill();
+    if (p.r >= POOL_BIG) { ctx.fillStyle = 'rgba(255,205,215,.2)'; ctx.beginPath(); ctx.ellipse(p.x - p.r * .3, p.y - p.r * .4, p.r * .2, p.r * .1, -.5, 0, TAU); ctx.fill(); }   // brilho de líquido
+  }
+  for (const s of prints) {
+    if (s.x < x0 || s.y < y0 || s.x > x1 || s.y > y1) continue;
+    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot); ctx.fillStyle = `rgba(${s.rgb},${s.a.toFixed(3)})`;
+    ctx.beginPath(); ctx.ellipse(1.5, 0, 5, 3.1, 0, 0, TAU); ctx.fill();   // sola
+    ctx.beginPath(); ctx.ellipse(-5, 0, 2.5, 2.3, 0, 0, TAU); ctx.fill();   // calcanhar
+    ctx.restore();
+  }
+}
+function addDecal(x, y, r) { decals.push({ x, y, r, a: rnd(.35, .7) }); if (decals.length > 360) decals.shift(); }
 function kill(f, src) {
   f.dead = true; f.hp = 0;
   for (let i = 0; i < 12; i++) addDecal(f.x + rnd(-18, 18), f.y + rnd(-18, 18), rnd(3, 9));
   unholster(f); dropWeapon(f);
   if (f.isPlayer) { if (training || !M) setState('dead'); shake = 10; }   // em partida: fica eliminado e espectando até a rodada acabar
-  else { f.respawnT = 4; if (src && src.isPlayer) kills++; }
+  else { f.respawnT = 4; if (src && src.isPlayer) { kills++; killT = 0; cmbN = 0; cmbT = 0; } }   // abate: aparece a caveira vermelha e o combo some
 }
 
 function shoot(f, w) {
@@ -891,7 +1014,7 @@ function sweepShot(f, a, m, w) {
   for (let i = 1; i <= n; i++) {
     const x = sx + (m.x - sx) * i / n, y = sy + (m.y - sy) * i / n;
     if (inCrate(x, y)) return true;
-    for (const e of enemiesOf(f)) if (!iframes(e) && Math.hypot(e.x - x, e.y - y) < hitR(e)) { damage(e, w.dmg * (f.isPlayer || f.remote ? 1 : DIFFS[cfg.diff].dmg), a, f); return true; }
+    for (const e of enemiesOf(f)) if (!iframes(e) && Math.hypot(e.x - x, e.y - y) < hitR(e)) { damage(e, w.dmg * (f.isPlayer || f.remote ? 1 : DIFFS[cfg.diff].dmg), a, f, 'gun'); return true; }
   }
   return false;
 }
@@ -1019,7 +1142,7 @@ function updateFighter(f, dt, it) {
               if (f.isPlayer) { hitStop = .07; shake = Math.max(shake, 8); }
               for (let i = 0; i < 8; i++) { const sp = rnd(160, 420), b = a + rnd(-.8, .8); sparks.push({ x: e.x - Math.cos(a) * 10, y: e.y - Math.sin(a) * 10, vx: Math.cos(b) * sp, vy: Math.sin(b) * sp, life: 1 }); }
               e.vx += Math.cos(a) * 260; e.vy += Math.sin(a) * 260;
-              damage(e, w.dmg, a, f);
+              damage(e, w.dmg, a, f, weaponKind(f.weapon));
             }
           }
         if (f.swing >= 1) f.swing = -1;
@@ -1054,7 +1177,7 @@ function updateFighter(f, dt, it) {
         if (!e.dead && Math.hypot(e.x - w.x, e.y - w.y) < e.r + C.hitRadius * (p.heavy ? 1.4 : 1)) {
           p.landed = true; if (f.isPlayer) hitStop = .05;
           for (let i = 0; i < (p.heavy ? 9 : 5); i++) { const a = f.angle + rnd(-.7, .7), s = rnd(160, 400); sparks.push({ x: w.x, y: w.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1 }); }
-          damage(e, (f.weapon && WEAPONS[f.weapon].knuckle && hand === domHand(f) ? Math.max(f.punchDmg * WEAPONS[f.weapon].punchMul, WEAPONS[f.weapon].dmg) : f.punchDmg) * (p.heavy ? 1.5 : 1), f.angle, f); break;
+          damage(e, (f.weapon && WEAPONS[f.weapon].knuckle && hand === domHand(f) ? Math.max(f.punchDmg * WEAPONS[f.weapon].punchMul, WEAPONS[f.weapon].dmg) : f.punchDmg) * (p.heavy ? 1.5 : 1), f.angle, f, (f.weapon && WEAPONS[f.weapon].knuckle && hand === domHand(f)) ? 'blunt' : 'fist'); break;
         }
     if (p.t >= 1) p.t = -1;
   }
@@ -1184,7 +1307,7 @@ function updateBullets(dt) {
       }
       for (const f of [player, ...bots])
         if (!f.dead && !iframes(f) && f !== b.owner && f.team !== b.owner.team && Math.hypot(f.x - b.x, f.y - b.y) < hitR(f) && !(f.cover && f.peekK < .5 && b.vx * f.cover.nx + b.vy * f.cover.ny > 0)) {   // protegido de tiros vindos do outro lado da parede
-          damage(f, b.dmg * (b.owner.isPlayer || b.owner.remote ? 1 : DIFFS[cfg.diff].dmg), Math.atan2(b.vy, b.vx), b.owner);
+          damage(f, b.dmg * (b.owner.isPlayer || b.owner.remote ? 1 : DIFFS[cfg.diff].dmg), Math.atan2(b.vy, b.vx), b.owner, 'gun');
           b.life = 0; break;
         }
     }
@@ -1254,7 +1377,7 @@ function updatePlay(dt) {
     if (b.remote) { remoteStep(b, dt); continue; }
     updateFighter(b, dt, b.stun > 0 ? {} : b.dummy ? { mx: 0, my: 0, aim: Math.atan2(player.y - b.y, player.x - b.x), fire: false, punch: false, reload: false, throw: false } : botIntent(b, dt));
   }
-  updateBullets(dt); updateThrown(dt);
+  updateBullets(dt); updateThrown(dt); updateBlood(dt);
   if (training) {   // solitário: munição infinita
     const pw = player.weapon && WEAPONS[player.weapon]; if (pw && !pw.melee && player.reserve < pw.reserve) player.reserve = pw.reserve;
   }
@@ -1268,6 +1391,8 @@ function updatePlay(dt) {
   for (const r of rings) { r.life -= dt * 6; r.r += dt * 140; } rings = rings.filter(r => r.life > 0);
   for (const s of sparks) { s.x += s.vx * dt; s.y += s.vy * dt; s.vx *= .9; s.vy *= .9; s.life -= dt * 5; } sparks = sparks.filter(s => s.life > 0);
   for (const c of casings) { c.x += c.vx * dt; c.y += c.vy * dt; c.vx *= .92; c.vy *= .92; c.rot += c.vr * dt; c.vr *= .94; c.life -= dt; } casings = casings.filter(c => c.life > 0);
+  if (cmbT > 0) { cmbT -= dt; if (cmbT <= 0) cmbN = 0; } cmbPop = Math.max(0, cmbPop - dt * 2.6); cmbAge += dt;
+  if (killT >= 0) { killT += dt; if (killT > KILL_DUR) killT = -1; }
   if (TUT) tutUpdate(dt);
 }
 
@@ -1431,7 +1556,9 @@ function drawCrates() {
 /* ------------------------------ MAPAS --------------------------------- */
 /* L = obstáculos [x, y, w, h, tipo, variação], tudo em fração da largura (x, w) e da altura (y, h) do mundo.
    spawn = onde o jogador nasce. Cada mapa tem piso, borda e decoração (decor) próprios. */
-const puddle = (x, y, rx, ry, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x * WW, y * WH, rx, ry, 0, 0, TAU); ctx.fill(); };
+const puddle = (x, y, rx, ry, col) => {
+  const k = x + ',' + y + ',' + WW; if (!pools.has(k)) { const m = col.match(/[\d.]+/g); pools.set(k, { x: x * WW, y: y * WH, rx, ry, rgb: m[0] + ',' + m[1] + ',' + m[2] }); }
+  ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x * WW, y * WH, rx, ry, 0, 0, TAU); ctx.fill(); };
 const MAPS = [
   { id: 'docas', name: 'DOCAS', sub: 'ESTALEIRO · PORTO', accent: '#e0b33d', spawn: [.5, .4],
     f1: '#14171c', f2: '#171b21', grid: 'rgba(255,255,255,.03)', edge: 'rgba(224,179,61,.35)', T: 64,
@@ -1505,9 +1632,9 @@ const MINI_COL = (k, v) => k === 'cont' ? CONT_COLS[v % CONT_COLS.length][0] : (
 function drawPickups(t) {
   for (const pk of pickups) {
     const w = WEAPONS[pk.key], bob = Math.sin(t * 3 + pk.t) * 2, pulse = .5 + .5 * Math.sin(t * 4 + pk.t);
-    const B = sideBox(w), ps = Math.min(1.25, 54 / B.w) * (w.vis || 1), ang = Math.sin(pk.t * 7.1) * .5 - .1;
+    const B = sideBox(w), ps = w.len / B.w,   // no chão: mesmo tamanho que na mão e no ar
+          ang = Math.sin(pk.t * 7.1) * .5 - .1;
     ctx.save(); ctx.translate(pk.x, pk.y); ctx.rotate(ang);
-    ctx.fillStyle = w.accent; ctx.globalAlpha = .1 + pulse * .1; ctx.beginPath(); ctx.ellipse(0, 1, B.w * ps * .62, B.h * ps * .8, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;   // brilho da cor da arma
     ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.beginPath(); ctx.ellipse(2, B.h * ps * .5 + 1, B.w * ps * .5, 4.5 * ps, 0, 0, TAU); ctx.fill();   // sombra no chão
     ctx.scale(ps, ps); drawSide(w);
     ctx.restore();
@@ -1621,6 +1748,7 @@ function drawThrown() {
       ctx.beginPath(); ctx.moveTo(t.x - t.vx * .035, t.y - t.vy * .035); ctx.lineTo(t.x, t.y); ctx.stroke();
     }
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(t.x + 2, t.y + 7, 15, 5, 0, 0, TAU); ctx.fill();
+    if (w.knuckle) { const k = w.len / sideBox(w).w; ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot); ctx.scale(k, k); drawSide(w); ctx.restore(); continue; }   // soco-inglês: mesmo desenho e tamanho do chão
     const mn = Math.min(...w.parts.map(q => q[0])), mx = Math.max(...w.parts.map(q => q[0] + q[2]));
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.rot); if (w.vis) ctx.scale(w.vis, w.vis); ctx.translate(-(mn + mx) / 2, 0); drawWeapon(w); ctx.restore();
   }
@@ -1651,7 +1779,7 @@ function drawSlide(f) {
   slHand(-22, -23, Math.atan2(-3, -10), -1, false);
   seg(-2, 11, 6, 16, 9.5, dk); seg(6, 16, 12, 15, 8, pal.skinD); seg(-2, 11, 6, 16, 7.5, lt); seg(6, 16, 12, 15, 6, pal.skin);   // braço da frente, perto do corpo
   const w = f.weapon && WEAPONS[f.weapon];
-  if (w && w.parts) { const mn = Math.min(...w.parts.map(q => q[0])), mx = Math.max(...w.parts.map(q => q[0] + q[2])); ctx.save(); ctx.translate(14, 15); if (w.vis) ctx.scale(w.vis, w.vis); ctx.translate(-(mn + mx) / 2, 0); drawWeapon(w); ctx.restore(); }
+  if (w && w.parts && !w.knuckle) { const mn = Math.min(...w.parts.map(q => q[0])), mx = Math.max(...w.parts.map(q => q[0] + q[2])); ctx.save(); ctx.translate(14, 15); if (w.vis) ctx.scale(w.vis, w.vis); ctx.translate(-(mn + mx) / 2, 0); drawWeapon(w); ctx.restore(); }
   slHand(12, 15, Math.atan2(-1, 6), 1, !!w);
   ctx.save(); ctx.translate(-20, 0); drawHeadTop(pal); ctx.restore();   // cabeça mais atrás
   ctx.restore();
@@ -1687,7 +1815,7 @@ function drawFighter(f) {
   const shoulder = side => { const x = -sn * C.shoulder * side, y = ct * C.shoulder * side, cd = Math.cos(d), sd = Math.sin(d); return [x * cd - y * sd - lox, x * sd + y * cd - loy]; };
   ctx.save(); ctx.translate(lox, loy);   // braços e arma saem pela quina; os ombros ficam no corpo
   if (f.weapon && !WEAPONS[f.weapon].knuckle) {
-    const w = WEAPONS[f.weapon], ox = (w.melee ? 6 : holdX(w)) - f.kick, bob = Math.sin(ph * 2) * .6 * sp, L = lefty(f);   // canhoto: a arma e os braços são espelhados
+    const w = WEAPONS[f.weapon], me = w.melee ? meleeExt(f) : 0, ox = (w.melee ? 3 + 17 * me : holdX(w)) - f.kick, bob = Math.sin(ph * 2) * .6 * sp, L = lefty(f);   // canhoto: a arma e os braços são espelhados
     const rot = w.melee ? swingRot(f) : 0, cr = Math.cos(rot), sr = Math.sin(rot);
     const vs = w.vis || 1, gp = g => ({ x: ox + (g[0] * cr - g[1] * sr) * vs, y: L ? bob - (g[0] * sr + g[1] * cr) * vs : bob + (g[0] * sr + g[1] * cr) * vs });
     if (w.melee && f.swing > .12 && f.swing < .7) {   // rastro do golpe
@@ -1697,7 +1825,7 @@ function drawFighter(f) {
     }
     ctx.save(); ctx.translate(ox, bob); if (L) ctx.scale(1, -1); ctx.rotate(rot); if (w.vis) ctx.scale(w.vis, w.vis); drawWeapon(w); ctx.restore();
     const [lx, ly] = shoulder(-1), [rx, ry] = shoulder(1);
-    if (w.melee) { drawArm(f, lx, ly, gp(L ? w.gripR : w.gripL), -1, .52, true); drawArm(f, rx, ry, gp(L ? w.gripL : w.gripR), 1, .52, true); }
+    if (w.melee) { const mk = .52 - .02 * clamp(me, 0, 1), st = me > .8; drawArm(f, lx, ly, gp(L ? w.gripR : w.gripL), -1, mk, true, st); drawArm(f, rx, ry, gp(L ? w.gripL : w.gripR), 1, mk, true, st); }
     else if (L) {
       drawArm(f, rx, ry, fistLocal(f, 'right'), 1);       // mão direita (não dominante) solta ao lado do corpo
       drawArm(f, lx, ly, gp(w.gripR), -1, .5, true, true);   // braço esquerdo esticado, segurando e apontando a arma
@@ -1800,6 +1928,46 @@ function drawTopRight() {
     y += r.h;
   }
 }
+/* Marcador de combo (branco, com o número de acertos seguidos) e animação de abate (caveira vermelha) no centro, embaixo, na altura da arma */
+function drawComboMark(cx, cy, u) {
+  const RED = '#ff2b2b', DK = '#140000';
+  if (killT >= 0) {   // abate: caveira vermelha com anéis girando e pulsando (o branco não aparece)
+    const t = killT, a = t < 1.3 ? 1 : clamp(1 - (t - 1.3) / .5, 0, 1), pop = easeOutExpo(clamp(t / .3, 0, 1)), sc = 1 + .7 * (1 - pop);
+    const sx = t < .25 ? Math.sin(t * 90) * (1 - t / .25) * .03 : 0;   // tremidinha no impacto
+    ctx.save(); ctx.translate(cx + sx * u, cy); ctx.scale(u * sc, u * sc); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.globalAlpha = a * .62; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.fill();   // fundo escuro, como na referência
+    ctx.globalAlpha = a; ctx.shadowColor = RED; ctx.shadowBlur = 12; ctx.strokeStyle = RED; ctx.fillStyle = RED;
+    ctx.lineWidth = .055; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke();                              // anel externo
+    ctx.save(); ctx.rotate(t * 1.1); ctx.lineWidth = .03; ctx.setLineDash([.28, .16]); ctx.beginPath(); ctx.arc(0, 0, .86, 0, TAU); ctx.stroke(); ctx.restore();   // anel tracejado girando
+    for (let k = 0; k < 2; k++) { const w = (t * 1.3 + k * .5) % 1; ctx.globalAlpha = a * (1 - w) * .75; ctx.lineWidth = .022; ctx.beginPath(); ctx.arc(0, 0, .4 + w * .5, 0, TAU); ctx.stroke(); }   // ondas saindo da caveira
+    if (t < .5) { const q = t / .5; ctx.globalAlpha = (1 - q) * .9; ctx.strokeStyle = '#ffb3a8'; ctx.lineWidth = .07 * (1 - q) + .01; ctx.beginPath(); ctx.arc(0, 0, 1 + q * .9, 0, TAU); ctx.stroke(); ctx.strokeStyle = RED; }   // onda de choque do abate
+    ctx.globalAlpha = a; ctx.lineWidth = .05;
+    for (let k = 0; k < 4; k++) {   // quatro raios cruzados, com a ponta cortando o anel
+      const an = Math.PI / 4 + k * Math.PI / 2, c = Math.cos(an), s2 = Math.sin(an), l = 1.12 + .06 * Math.sin(t * 8 + k);
+      ctx.beginPath(); ctx.moveTo(c * .52, s2 * .52); ctx.lineTo(c * l, s2 * l); ctx.stroke();
+    }
+    ctx.shadowBlur = 0; ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.moveTo(0, -.44);   // caveira: crânio + bochechas + mandíbula num contorno só
+    ctx.bezierCurveTo(.26, -.44, .44, -.28, .42, -.06); ctx.bezierCurveTo(.41, .06, .32, .12, .28, .2); ctx.lineTo(.25, .36); ctx.quadraticCurveTo(.24, .43, .16, .43);
+    ctx.lineTo(-.16, .43); ctx.quadraticCurveTo(-.24, .43, -.25, .36); ctx.lineTo(-.28, .2); ctx.bezierCurveTo(-.32, .12, -.41, .06, -.42, -.06); ctx.bezierCurveTo(-.44, -.28, -.26, -.44, 0, -.44);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = DK;
+    for (const m of [-1, 1]) { ctx.beginPath(); ctx.moveTo(m * .05, .02); ctx.lineTo(m * .38, -.12); ctx.lineTo(m * .36, .07); ctx.quadraticCurveTo(m * .3, .17, m * .2, .15); ctx.lineTo(m * .08, .1); ctx.closePath(); ctx.fill(); }   // olhos bravos
+    ctx.beginPath(); ctx.moveTo(0, .12); ctx.lineTo(-.055, .26); ctx.lineTo(.055, .26); ctx.closePath(); ctx.fill();   // nariz
+    ctx.strokeStyle = DK; ctx.lineWidth = .03; ctx.beginPath(); ctx.moveTo(-.2, .32); ctx.lineTo(.2, .32); for (const x of [-.12, -.04, .04, .12]) { ctx.moveTo(x, .32); ctx.lineTo(x, .43); } ctx.stroke();   // dentes
+    ctx.restore(); return;
+  }
+  if (cmbN < 1) return;
+  const a = cmbT < .5 ? clamp(cmbT / .5, 0, 1) : 1, pop = Math.sin(clamp(cmbPop, 0, 1) * Math.PI / 2), age = easeOutExpo(clamp(cmbAge / .3, 0, 1));
+  const sc = (.55 + .45 * age) * (1 + .2 * pop), q = 1 - clamp(cmbPop, 0, 1);
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(u * sc, u * sc); ctx.lineCap = 'round'; ctx.strokeStyle = '#fff';
+  ctx.globalAlpha = a * .12; ctx.lineWidth = .045; ctx.beginPath(); ctx.arc(0, 0, 1, 0, TAU); ctx.stroke();                                   // trilho do tempo
+  ctx.globalAlpha = a; ctx.lineWidth = .06; ctx.beginPath(); ctx.arc(0, 0, 1, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(cmbT / 4, 0, 1)); ctx.stroke();   // arco que esvazia com o tempo
+  ctx.save(); ctx.rotate(cmbAge * .9); ctx.globalAlpha = a * .7; ctx.lineWidth = .03; ctx.setLineDash([.22, .2]); ctx.beginPath(); ctx.arc(0, 0, .74, 0, TAU); ctx.stroke(); ctx.restore();   // anel interno girando
+  if (cmbPop > 0) { ctx.globalAlpha = a * (1 - q); ctx.lineWidth = .05 * (1 - q) + .01; ctx.beginPath(); ctx.arc(0, 0, 1 + q * .7, 0, TAU); ctx.stroke(); }   // onda a cada acerto
+  ctx.restore();
+  ctx.globalAlpha = a; txt(String(cmbN), cx, cy + 2 - pop * u * .06, u * (cmbN > 9 ? .62 : .8) * (1 + .3 * pop) * (.6 + .4 * age), '#fff', 'center'); ctx.globalAlpha = 1;
+}
 function drawHUD(t) {
   const W = innerWidth, H = innerHeight;
   if (player.stun > 0 && !player.dead) {   // aviso de nocaute
@@ -1817,14 +1985,14 @@ function drawHUD(t) {
   else { txt(`ABATES ${kills}`, 18, 56, 18, '#e7e4d3', 'left'); txt(`BOTS VIVOS ${bots.filter(b => !b.dead).length}/${bots.length}`, 18, 80, 14, 'rgba(255,255,255,.6)', 'left'); }
 
   // Arma selecionada (estilo Kusan): bala, munição, nome e silhueta (proporção das capturas do jogo)
-  const CREAM = '#e7e4d3', HK = clamp(W / 2560 * 1.35, .6, 1.05), R = W - 40 * HK;
+  const CREAM = '#e7e4d3', HK = clamp(W / 2560 * 1.35, .6, 1.05), R = W - 76 * HK;   // margem da borda direita
   if (player.weapon) {
     const w = WEAPONS[player.weapon], S = w.sil;
-    const sc = S.vertical ? S.hudH * HK / S.h : Math.min((S.real || S.hudW) * HK / S.w, W * .42 / S.w), sw = S.w * sc, sh = S.h * sc, sy = H - 16 * HK - sh;
+    const sc = S.vertical ? S.hudH * HK / S.h : Math.min(({ cleaver: 230, butterfly: 230, sledge: 300, wrench: 280, bottle: 260, pocket: 280, crowbar: 300, sawed: 270 }[player.weapon] || 185) * HK / S.w, W * .42 / S.w), sw = S.w * sc, sh = S.h * sc, sy = H - 46 * HK - sh;   // margem da borda de baixo
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 8; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
     drawSilhouette(w, R - sw, sy, sc, !S.vertical);
     ctx.fillStyle = CREAM; ctx.font = `700 ${32 * HK}px "Arial Rounded MT Bold","Trebuchet MS",Arial,sans-serif`;
-    ctx.fillText(w.name, R, sy - 20 * HK);
+    if (!w.melee) ctx.fillText(w.name, R, sy - 20 * HK);   // armas brancas: sem nome
     if (!w.melee) {
       ctx.globalAlpha = player.reloadT > 0 ? .4 : 1;
       const rs = '/' + player.reserve, ms = String(player.mag), ay = sy - 74 * HK;
@@ -1839,9 +2007,8 @@ function drawHUD(t) {
       ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-14, -1, 20, 1.4); ctx.restore();
     }
     ctx.restore();
-  } else if (player.combo > 1) {
-    txt(`COMBO x${player.combo}${player.combo % 3 === 2 ? ' >> FORTE!' : ''}`, R, H - 44, 20, CREAM, 'right');
   }
+  if (!player.dead) drawComboMark(W / 2, H - 46 * HK - 46 * HK, 46 * HK);
   if (player.near && !player.dead) {  // Aviso de pegar arma (coordenadas do mundo -> tela)
     const w = WEAPONS[player.near.key], px = (player.near.x - cam.x) * ZOOM, py = (player.near.y - cam.y) * ZOOM;
     txt(`[${keyName(KEYS.interact)}] PEGAR ${w.model}`, px, py - 56, 13, w.accent, 'center', 8);
@@ -2796,6 +2963,56 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 92, v: '0.50.0', title: 'Sangramento, poças e pegadas',
+    criado: [
+      'Sangramento por tipo de golpe: tiro (pingo a cada 0,4 s, perde vida por 4 s), arma cortante como cutelo, facas e garrafa (pingo a cada 0,2 s com pingos maiores, perde vida por 6 s), arma de impacto como marreta, pé de cabra e chave (pingo a cada 0,8 s, só com vida abaixo de 30%) e soco (só pinga depois de 3 ou mais socos seguidos e não tira vida).',
+      'Poça de sangue: parado por mais de 1,5 s sangrando, os pingos se fundem no mesmo lugar e formam uma poça que cresce. Quanto mais tempo parado e mais grave a ferida, maior a poça.',
+      'Pegadas dinâmicas: pisar em sangue pouco líquido deixa 1 ou 2 pegadas fracas. Pisar numa poça grande (sangue acumulado ou água do cenário) deixa de 5 a 7 pegadas, a primeira forte e as seguintes cada vez mais fracas até sumirem.',
+    ] },
+  { n: 91, v: '0.49.1', title: 'Combo animado e caveira refeita',
+    modificado: [
+      'A caveira vermelha do abate foi refeita: contorno mais limpo, olhos bravos, nariz e dentes, fundo escuro, anel tracejado girando, ondas saindo do centro, onda de choque e uma tremidinha no impacto.',
+      'O marcador de combo agora tem animação: entra crescendo, o número dá um pulo e uma onda sai do anel a cada acerto, o anel interno gira e um arco branco vai esvaziando mostrando quanto tempo falta para o combo acabar.',
+    ] },
+  { n: 90, v: '0.49.0', title: 'Combo de acertos e animação de abate',
+    criado: [
+      'Marcador de combo no centro da tela, embaixo, na altura da arma: dois anéis brancos com o número de acertos seguidos que você deu. O número cresce a cada acerto e some sozinho se você ficar uns 4 segundos sem acertar.',
+      'Se você levar dano durante o combo, o número de combo some.',
+      'Animação de abate: quando você mata alguém, aparece no mesmo lugar uma caveira vermelha com quatro raios cruzados e anéis pulsando. Quando a animação acaba, ela some e o marcador branco não volta (o combo recomeça do zero).',
+    ],
+    removido: ['O texto COMBO x que aparecia no canto inferior direito quando você estava sem arma (o marcador novo mostra o combo).'] },
+  { n: 89, v: '0.48.1', title: 'Calibre 12 maior no HUD',
+    modificado: ['A silhueta da espingarda calibre 12 (Sawed-Off) no canto inferior direito ficou maior.'] },
+  { n: 88, v: '0.48.0', title: 'Golpe com o braço esticando e garrafa pelo gargalo',
+    criado: [
+      'Nova animação das armas brancas: em repouso o personagem segura a arma com os braços encolhidos junto ao corpo; ao bater, ele recua um pouco e estica os braços até o fim para acertar.',
+    ],
+    modificado: [
+      'A garrafa agora é segurada pela parte fina (o gargalo), com o corpo da garrafa para a frente, como quem vai bater em alguém com ela.',
+      'A silhueta da arma no canto inferior direito ficou mais afastada das bordas da tela.',
+    ] },
+  { n: 87, v: '0.47.5', title: 'Soco-inglês arremessado',
+    modificado: [
+      'O soco-inglês arremessado agora aparece com o mesmo desenho e tamanho que tem no chão (antes ficava maior no ar). As outras armas já tinham o mesmo tamanho no ar e no chão.',
+      'Deslizando com o soco-inglês, ele não aparece mais como uma peça solta na mão.',
+    ] },
+  { n: 86, v: '0.47.4', title: 'Mesmo tamanho na mão, no ar e no chão',
+    modificado: [
+      'Cada arma agora tem exatamente o mesmo tamanho na mão, arremessada no ar e caída no chão. As armas em geral ficaram menores na mão.',
+      'No HUD do canto inferior direito, marreta, chave de tubo, garrafa, canivete e pé de cabra ficaram maiores.',
+    ],
+    removido: ['O nome das armas brancas que aparecia acima da silhueta no canto inferior direito.'] },
+  { n: 85, v: '0.47.3', title: 'Ajuste de tamanho das armas',
+    modificado: [
+      'Armas no chão ficaram menores, em proporção ao personagem. A chave de tubo ficou menor na mão.',
+      'No HUD do canto inferior direito, cutelo, canivete, marreta, faca borboleta e chave de tubo ficaram maiores.',
+    ],
+    removido: ['A luz colorida em volta das armas no chão.'] },
+  { n: 84, v: '0.47.2', title: 'Proporção real das armas',
+    modificado: [
+      'Em partida (na mão, no chão, arremessada e no deslize) cada arma agora tem tamanho proporcional ao tamanho real: soco-inglês e canivete pequenos, pistolas médias, espingarda serrada maior, e chave de tubo, pé de cabra e marreta bem compridos. Antes todas no chão tinham o mesmo tamanho.',
+      'No HUD do canto inferior direito, a silhueta branca da arma agora tem o mesmo tamanho para todas as armas.',
+    ] },
   { n: 83, v: '0.47.1', title: 'Novos sprites: cutelo e pé de cabra',
     modificado: [
       'O cutelo e o pé de cabra ganharam novos desenhos em partida (na mão, arremessados, no deslize e caídos no chão): cutelo com cabo de madeira, rebites dourados e furo na lâmina; pé de cabra de aço com a garra em V curvada e a ponta achatada. A tela ARMAS continua como estava.',
@@ -3648,7 +3865,7 @@ function startOnline(m) {   // todos entram na mesma partida: o anfitrião simul
   if (NET.host) { NET.rin = {}; NET.guests.forEach(g => NET.rin[g.id] = { mx: 0, my: 0, aim: 0, down: false, pk: false, clk: 0, it: 0, th: 0, rl: 0, cv: 0, sl: 0, hs: 0 }); startMatch(); return; }
   NET.cl = true; NET.world = m.world; WW = m.world.w; WH = m.world.h; curMap = MAPS[m.map]; buildCrates();
   M = { round: 0, map: m.map, room: cfg.team, team: cfg.team > 0, sc: [0, 0], target: 0, time: 0, phase: '', phaseT: 0, left: 0, flashT: 0, last: null, beep: -1 };
-  decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; kills = 0; dmgFlash = 0; shake = 0;
+  decals = []; puddles = []; prints = []; pools.clear(); thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; kills = 0; dmgFlash = 0; shake = 0;
   matchTrack = cfg.music ? cfg.music - 1 : pickTrack();
   player = makeFighter({ isPlayer: true, pal: CHARS[cfg.char], x: WW / 2, y: WH / 2 }); player.tx = player.x; player.ty = player.y; player.ta = 0; bots = []; NET.all = [player]; NET.rd = -1;
   touch.ang = 0; updateCam(); setState('play');
@@ -3868,7 +4085,7 @@ function cliBuild(S) {
   const newRound = S.rd !== NET.rd; NET.rd = S.rd; const mi = Math.max(0, S.o.indexOf(NET.ci));
   NET.all = S.f.map((v, i) => { const f = makeFighter({ isPlayer: i === mi, pal: CHARS[S.c[i]] }); applyF(f, v, true); return f; });
   player = NET.all[mi]; bots = NET.all.filter(f => f !== player);
-  if (newRound) { decals = []; thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; }
+  if (newRound) { decals = []; puddles = []; prints = []; pools.clear(); thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; }
   updateCam();
 }
 function applyF(f, v, init) {
@@ -4053,6 +4270,7 @@ function loop(now) {
     ctx.translate(-cam.x, -cam.y);
     drawFloor();
     for (const d of decals) { ctx.fillStyle = `rgba(150,10,35,${d.a})`; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill(); }
+    drawBlood();
     drawPickups(menuT); drawCrates();
     if (M && M.team) for (const f of [player, ...bots]) if (!f.dead) {   // anel no chão: verde = seu time, vermelho = inimigo
       ctx.strokeStyle = f.team === player.team ? 'rgba(143,214,164,.85)' : 'rgba(255,90,90,.75)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(f.x, f.y, 24, 0, TAU); ctx.stroke();
