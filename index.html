@@ -284,7 +284,9 @@ function drawWeapon(w) {
 
 /* ------------------------------ ESTADO -------------------------------- */
 const MODES = ['CLÁSSICO', 'INFINITO'], PTS = [3, 5, 7, 10, 15], TIMES = [30, 60, 90, 120, 180];
-const LOOTS = [{ name: 'POUCA', init: 3, cap: 4, every: 14 }, { name: 'MÉDIA', init: 5, cap: 7, every: 9 }, { name: 'ALTA', init: 9, cap: 12, every: 5 }];   // loot: armas iniciais, máximo no mapa e intervalo de novas armas (s)
+const LOOTS = [{ name: 'POUCA', per: .7, perF: .3, near: false, every: 14 }, { name: 'MÉDIA', per: 1.4, perF: .7, near: true, every: 8 }, { name: 'MUITA', per: 3, perF: 1.5, near: true, every: 3.5 }];   // loot: por "tela" de mapa (MAPK²) + por lutador; near = uma arma ao alcance de cada lutador na largada; every = reposição (s)
+const lootInit = (i, nf) => Math.round(MAPK * MAPK * LOOTS[i].per + nf * LOOTS[i].perF);   // armas no chão na largada (nf = nº de lutadores)
+const lootCap = (i, nf) => Math.round(lootInit(i, nf) * 1.4) + 2;                              // máximo de armas no chão   // loot: armas iniciais, máximo no mapa e intervalo de novas armas (s)
 let state = 'intro', cfg = { bots: 4, diff: 1, char: 0, mode: 0, pts: 1, time: 2, loot: 1, musicVol: 7, sfxVol: 8, music: 0 }, training = false, chIdx = 0, trainT = 0;
 let M = null, introT = 0;
 const NET = { peer: null, conns: {}, host: false, code: '', players: [], me: null, msg: '', err: '', busy: false, snap: null, others: null, cap: 8, copied: false }; let JOIN = '', NETBID = 0;   // estado do modo online
@@ -323,7 +325,7 @@ function initAudio() {
 function applyVolumes() { if (!ac) return; musicBus.gain.setTargetAtTime(.5 * vol(cfg.musicVol) * mu.duck, ac.currentTime, .05); sfxBus.gain.setTargetAtTime(.9 * vol(cfg.sfxVol), ac.currentTime, .05); }
 function unlockAudio() { initAudio(); if (ac && ac.state !== 'running') { try { ac.resume(); } catch (e) {} } }
 function audioChanged() { saveCfg(); if (cfg.music) matchTrack = cfg.music - 1; applyVolumes(); }
-function introClick() { unlockAudio(); if (introGate) introGate = false; else skipIntro(); }
+function introClick() { unlockAudio(); if (introGate) { introGate = false; introT = 0; HATC = hatClock(); } else skipIntro(); }
 initAudio();
 
 function env(g, t, a, peak, d) { g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(.0001, t + a + d); }
@@ -745,6 +747,11 @@ function freeSpot(minDist = 0, from = null) {
   }
   return { x: 60, y: 60 };
 }
+function lootSpot() {   // espalha o loot: sorteia vários pontos e fica com o mais longe das armas que já estão no chão
+  let best = null, bd = -1;
+  for (let i = 0; i < 14; i++) { const p = freeSpot(); let m = 1e9; for (const q of pickups) m = Math.min(m, Math.hypot(q.x - p.x, q.y - p.y)); if (m > bd) { bd = m; best = p; } }
+  return best;
+}
 const holdX = w => C.holdReach - w.gripR[0] * (w.vis || 1);   // x (local) da origem da arma: a mão direita fica em holdReach
 const toWorld = (f, lx, ly) => { const c = Math.cos(f.angle), s = Math.sin(f.angle); return { x: f.x + lx*c - ly*s, y: f.y + lx*s + ly*c }; };
 
@@ -780,9 +787,14 @@ function startGame(tr, keepKills) {
   const hum = [cfg.char, ...(NET.online ? NET.guests.map(g => g.char) : [])]; let pool = [...new Set([...(NET.others || []), ...CHARS.map((_, i) => i)])].filter(i => !hum.includes(i)); if (!pool.length) pool = CHARS.map((_, i) => i);   // bots usam os personagens que nenhum jogador escolheu
   const tm = !training && M && M.team;   // partida por times: os primeiros (n-1) bots são aliados do jogador
   for (let i = 0; !training && i < nBots(); i++) { const b = { pal: CHARS[pool[i % pool.length]], pid: i + 1, team: tm ? (i < M.room - 1 ? 0 : 1) : i + 1 }; spawnBot(b); bots.push(b); }
-  {   // quantidade de loot escolhida na configuração (pouca / média / alta), também no solitário
-    const L = LOOTS[cfg.loot], ks = WKEYS.slice().sort(() => Math.random() - .5);
-    for (let i = 0; i < L.init; i++) { const k = ks[i % ks.length], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); }
+  {   // quantidade de loot escolhida na configuração (pouca / média / muita), também no solitário
+    const L = LOOTS[cfg.loot], nf = bots.length + 1, total = lootInit(cfg.loot, nf), ks = WKEYS.slice().sort(() => Math.random() - .5);
+    let i = 0;
+    const add = (x, y) => { const k = ks[i++ % ks.length], w = WEAPONS[k]; pickups.push({ x, y, key: k, mag: w.mag, reserve: w.reserve, t: rnd(0, 6) }); };
+    if (L.near) for (const f of [player, ...bots]) {   // uma arma ao alcance de cada lutador, para ninguém largar de mãos vazias
+      for (let tries = 0; tries < 14; tries++) { const a = rnd(0, TAU), d = rnd(70, 150), x = f.x + Math.cos(a) * d, y = f.y + Math.sin(a) * d; if (x > 50 && x < WW - 50 && y > 50 && y < WH - 50 && !inCrate(x, y, 30)) { add(x, y); break; } }
+    }
+    while (i < total) { const q = lootSpot(); add(q.x, q.y); }
     pickupTimer = L.every;
   }
   assignRemotes(); touch.ang = 0; updateCam(); setState('play');
@@ -1406,7 +1418,7 @@ function updatePlay(dt) {
 
   if (TUT) pickupTimer = 1e9;
   pickupTimer -= dt;
-  if (pickupTimer <= 0) { pickupTimer = LOOTS[cfg.loot].every; if (pickups.length < LOOTS[cfg.loot].cap) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = freeSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
+  if (pickupTimer <= 0) { pickupTimer = LOOTS[cfg.loot].every; if (pickups.length < lootCap(cfg.loot, bots.length + 1)) { const k = WKEYS[Math.random() * WKEYS.length | 0], p = lootSpot(), w = WEAPONS[k]; pickups.push({ x: p.x, y: p.y, key: k, mag: w.mag, reserve: w.reserve, t: 0 }); } }
 
   shake = Math.max(0, shake - dt * 40); dmgFlash = Math.max(0, dmgFlash - dt);
   for (const t of trail) t.life -= dt * 9; trail = trail.filter(t => t.life > 0);
@@ -1656,7 +1668,10 @@ function drawPickups(t) {
     const w = WEAPONS[pk.key], bob = Math.sin(t * 3 + pk.t) * 2, pulse = .5 + .5 * Math.sin(t * 4 + pk.t);
     const B = sideBox(w), ps = w.len / B.w,   // no chão: mesmo tamanho que na mão e no ar
           ang = Math.sin(pk.t * 7.1) * .5 - .1;
-    ctx.save(); ctx.translate(pk.x, pk.y); ctx.rotate(ang);
+    ctx.save(); ctx.translate(pk.x, pk.y);
+    ctx.fillStyle = `rgba(255,214,90,${(.07 + .07 * pulse).toFixed(3)})`; ctx.beginPath(); ctx.arc(0, 0, 22 + pulse * 3, 0, TAU); ctx.fill();   // halo: ajuda a achar a arma no chão
+    ctx.strokeStyle = `rgba(255,214,90,${(.22 + .25 * pulse).toFixed(3)})`; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, 0, 16 + pulse * 2, 0, TAU); ctx.stroke();
+    ctx.rotate(ang);
     ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.beginPath(); ctx.ellipse(2, B.h * ps * .5 + 1, B.w * ps * .5, 4.5 * ps, 0, 0, TAU); ctx.fill();   // sombra no chão
     ctx.scale(ps, ps); drawSide(w);
     ctx.restore();
@@ -2046,6 +2061,13 @@ function drawHUD(t) {
     ctx.save(); ctx.translate(clamp(sx, 24, W - 24), clamp(sy, 24, H - 24)); ctx.rotate(Math.atan2(sy - H / 2, sx - W / 2)); ctx.fillStyle = 'rgba(255,59,92,.8)';
     ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-7, -7); ctx.lineTo(-7, 7); ctx.closePath(); ctx.fill(); ctx.restore();
   }
+  if (!player.dead && !player.weapon && !TUT) {   // desarmado: setas amarelas nas bordas para as 3 armas mais próximas fora da tela
+    for (const pk of pickups.map(q => ({ q, d: Math.hypot(q.x - player.x, q.y - player.y) })).sort((a, b) => a.d - b.d).slice(0, 3).map(o => o.q)) {
+      const sx = (pk.x - cam.x) * ZOOM, sy = (pk.y - cam.y) * ZOOM; if (sx > 0 && sx < W && sy > 0 && sy < H) continue;
+      ctx.save(); ctx.translate(clamp(sx, 24, W - 24), clamp(sy, 24, H - 24)); ctx.rotate(Math.atan2(sy - H / 2, sx - W / 2)); ctx.fillStyle = 'rgba(255,214,90,.9)';
+      ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-7, -7); ctx.lineTo(-7, 7); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+  }
   // Mira (e anel de recarga)
   const { mx: x, my: y } = TOUCH ? { mx: (player.x - cam.x) * ZOOM + Math.cos(touch.ang) * 130, my: (player.y - cam.y) * ZOOM + Math.sin(touch.ang) * 130 } : input;
   ctx.strokeStyle = player.coverBlock ? '#ff6b6b' : '#e7e4d3'; ctx.lineWidth = 2;
@@ -2118,7 +2140,7 @@ function drawSetupPre() {
   const noMap = !solo, wide = IW >= 900, tot = Math.min(IW - 40, 1080), pw = wide ? Math.round(tot * .54) : tot, rcw = noMap ? Math.min(IW - 40, 480) : wide ? tot - pw - 40 : tot;   // salas: sem escolha de mapa (a votação acontece depois de criar a sala)
   const cyc2 = cyc, fmt = sec => sec >= 60 ? (sec / 60) + ' MIN' + (sec % 60 ? ' ' + sec % 60 + 'S' : '') : sec + ' S';
   const diffR = ['DIFICULDADE', DIFFS[cfg.diff].name, () => cfg.diff = Math.max(0, cfg.diff - 1), () => cfg.diff = Math.min(2, cfg.diff + 1)];
-  const lootR = ['ARMAS', LOOTS[cfg.loot].name, () => cfg.loot = cyc2(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, 1)];
+  const lootR = ['ARMAS', LOOTS[cfg.loot].name + ' · ' + lootInit(cfg.loot, solo ? 1 : nBots() + 1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, -1), () => cfg.loot = cyc2(cfg.loot, LOOTS.length, 1)];
   if (!bgSetup && cfg.bots < 1) cfg.bots = 1;
   const modeRow = ['MODO', n + 'v' + n, () => cfg.team = cfg.team <= 1 ? 4 : cfg.team - 1, () => cfg.team = cfg.team >= 4 ? 1 : cfg.team + 1];   // BOTS: formato da partida   // só o campo de batalha aceita 0 bots
   const rows = solo ? [lootR] : botsSetup ? [modeRow, ['ESTILO', MODES[cfg.mode], () => cfg.mode = cyc2(cfg.mode, 2, -1), () => cfg.mode = cyc2(cfg.mode, 2, 1)],
@@ -2541,114 +2563,260 @@ function drawMatchEnd() {
 }
 
 /* ------------------------------ ABERTURA -------------------------------- */
-/* A senhora toda branca mira na tela e dá 3 tiros seguidos; cada furo abre mais o jogo por trás. Qualquer toque/tecla pula. */
+/* Fase 1 (antes do clique): um chapéu de feltro preto flutuando e girando no escuro, com o aviso para começar embaixo.
+   Fase 2 (depois do clique, T = segundos desde o clique): um homem pega o chapéu, olha de leve para a tela e dá 5 tiros;
+   o vidro da tela trinca a cada tiro e, no fim, estilhaça mostrando o menu. Qualquer toque/tecla depois do clique pula. */
 const IC = document.createElement('canvas'), ictx = IC.getContext('2d');
-const SHOTS = [{ t: 2.2, fx: .5, fy: .5, r: .17 }, { t: 2.9, fx: .3, fy: .62, r: .3 }, { t: 3.5, fx: .65, fy: .4, r: 1.25 }], INTRO_END = 4.4;   // r = raio do furo (fração da diagonal)
-const CRACKS = SHOTS.map(() => Array.from({ length: 16 }, (_, i) => ({ a: i / 16 * TAU + rnd(-.15, .15), l: rnd(1.3, 2.2), j: [rnd(-.05, .05), rnd(-.05, .05), rnd(-.05, .05)] })));
+const SHOTS = [{ t: 3.15, fx: .5, fy: .47 }, { t: 3.5, fx: .33, fy: .6 }, { t: 3.82, fx: .68, fy: .34 }, { t: 4.1, fx: .24, fy: .3 }, { t: 4.35, fx: .6, fy: .66 }], BREAK_T = 4.95, INTRO_END = 6.9;
+const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+const HAT0 = performance.now(), hatClock = () => (performance.now() - HAT0) / 1000; let HATC = 0;   // HATC = relógio do chapéu no instante do clique
 function skipIntro() { introT = 0; setState('menu'); }
-function drawOldWoman(c, T, kick, flash) {   // desenhada em 800 x 600
-  const WH = '#ffffff', W1 = '#f1f1ee', W2 = '#dcdcd8', W3 = '#b3b3af';
-  const sq = 1 - .55 * clamp((T - .6) / 1.4, 0, 1) - .2 * kick, R = 60 + 14 * clamp((T - .6) / 1.6, 0, 1) + 26 * kick;
-  const halo = c.createRadialGradient(400, 270, 40, 400, 270, 380); halo.addColorStop(0, 'rgba(255,255,255,.16)'); halo.addColorStop(1, 'rgba(255,255,255,0)');
-  c.fillStyle = halo; c.fillRect(0, 0, 800, 600);
-  c.lineCap = 'round'; c.lineJoin = 'round';
-  // cachecol e ombros
-  c.fillStyle = W1; c.strokeStyle = W3; c.lineWidth = 3;
-  c.beginPath(); c.moveTo(40, 640); c.bezierCurveTo(80, 470, 230, 420, 400, 430); c.bezierCurveTo(570, 420, 720, 470, 760, 640); c.closePath(); c.fill(); c.stroke();
-  [[140, 540, 250, 465], [300, 620, 345, 470], [500, 620, 455, 470], [660, 540, 550, 465]].forEach(([a, b, e, f]) => { c.beginPath(); c.moveTo(a, b); c.quadraticCurveTo((a + e) / 2 + 22, (b + f) / 2 - 12, e, f); c.stroke(); });
-  // cabelo
-  c.fillStyle = W2;
-  for (const m of [1, -1]) { const X = x => m > 0 ? x : 800 - x; c.beginPath(); c.moveTo(X(255), 160); c.bezierCurveTo(X(175), 230, X(185), 335, X(232), 408); c.lineTo(X(305), 365); c.lineTo(X(305), 170); c.closePath(); c.fill(); }
-  // rosto
-  c.fillStyle = WH; c.beginPath(); c.ellipse(400, 265, 118, 150, 0, 0, TAU); c.fill();
-  c.strokeStyle = W3; c.lineWidth = 1.6;
-  [[335, 196, 400, 183, 465, 196], [342, 211, 400, 200, 458, 211]].forEach(([a, b, d, e, f, g]) => { c.beginPath(); c.moveTo(a, b); c.quadraticCurveTo(d, e, f, g); c.stroke(); });
-  for (const m of [1, -1]) { const X = x => m > 0 ? x : 800 - x; c.beginPath(); c.moveTo(X(318), 246); c.lineTo(X(300), 238); c.moveTo(X(318), 252); c.lineTo(X(298), 256); c.moveTo(X(318), 258); c.lineTo(X(302), 272); c.moveTo(X(366), 306); c.quadraticCurveTo(X(350), 330, X(352), 356); c.stroke(); }
-  // olhos, sobrancelhas, nariz, boca
-  for (const m of [1, -1]) {
-    const X = x => m > 0 ? x : 800 - x;
-    c.fillStyle = '#0b0b0d'; c.beginPath(); c.ellipse(X(352), 250, 21, 7 * sq + 1.6, 0, 0, TAU); c.fill();
-    c.fillStyle = '#fff'; c.beginPath(); c.arc(X(346), 249, 2, 0, TAU); c.fill();
-    c.strokeStyle = W3; c.lineWidth = 6; c.beginPath(); c.moveTo(X(320), 226 + (1 - sq) * 4); c.lineTo(X(380), 240 + (1 - sq) * 6); c.stroke();
+
+/* Trincas de cada tiro (em fração da diagonal) e cacos do vidro */
+const CRACKS = SHOTS.map(() => ({
+  rays: Array.from({ length: 15 }, (_, i) => { let off = 0; const a = i / 15 * TAU + rnd(-.18, .18), L = rnd(.2, .62), pts = []; for (let k = 1; k <= 7; k++) { off += rnd(-.012, .012); pts.push([L * k / 7, off]); } return { a, pts, br: Math.random() < .55 ? { k: 2 + (Math.random() * 3 | 0), a: rnd(-.8, .8), l: rnd(.05, .14) } : null }; }),
+  rings: [.035, .08, .15, .25].map(r => ({ r, on: Array.from({ length: 18 }, () => Math.random() < .6), j: Array.from({ length: 18 }, () => rnd(-.2, .2)) })),
+}));
+const SHARDS = (() => {
+  const cols = 13, rows = 9, g = [], out = [];
+  for (let j = 0; j <= rows; j++) { g[j] = []; for (let i = 0; i <= cols; i++) g[j][i] = [i / cols + (i && i < cols ? rnd(-.3, .3) / cols : 0), j / rows + (j && j < rows ? rnd(-.3, .3) / rows : 0)]; }
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const a = g[j][i], b = g[j][i + 1], c = g[j + 1][i + 1], d = g[j + 1][i];
+    for (const t of (Math.random() < .5 ? [[a, b, c], [a, c, d]] : [[a, b, d], [b, c, d]])) out.push({ p: t, cx: (t[0][0] + t[1][0] + t[2][0]) / 3, cy: (t[0][1] + t[1][1] + t[2][1]) / 3, vr: rnd(-4, 4), vx: rnd(-.12, .12), vy: rnd(-.05, .1), dl: rnd(0, .12) });
   }
-  c.strokeStyle = W3; c.lineWidth = 3; c.beginPath(); c.moveTo(400, 252); c.quadraticCurveTo(392, 290, 396, 306); c.moveTo(382, 312); c.quadraticCurveTo(400, 322, 418, 312); c.moveTo(372, 352); c.lineTo(428, 354); c.stroke();
-  // sombra do chapéu no rosto
-  c.save(); c.beginPath(); c.ellipse(400, 265, 118, 150, 0, 0, TAU); c.clip();
-  const sh = c.createLinearGradient(0, 160, 0, 250); sh.addColorStop(0, 'rgba(0,0,0,.45)'); sh.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = sh; c.fillRect(250, 150, 300, 110); c.restore();
-  // chapéu
-  c.strokeStyle = W3; c.lineWidth = 3; c.fillStyle = W2; c.beginPath(); c.moveTo(240, 156); c.bezierCurveTo(240, 36, 560, 36, 560, 156); c.closePath(); c.fill(); c.stroke();
-  c.strokeStyle = W3; c.lineWidth = 10; c.beginPath(); c.moveTo(246, 128); c.quadraticCurveTo(400, 100, 554, 128); c.stroke();
-  c.fillStyle = W1; c.strokeStyle = W3; c.lineWidth = 3; c.beginPath(); c.ellipse(400, 162, 345, 62, 0, 0, TAU); c.fill(); c.stroke();
-  c.strokeStyle = W2; c.lineWidth = 2; for (let i = 1; i < 5; i++) { c.beginPath(); c.ellipse(400, 162, 345 - i * 40, 62 - i * 8, 0, .15, Math.PI - .15); c.stroke(); }
-  // arma apontada para a tela
-  const mx = 470, my = 455, sx = 330, sy = 372, r1 = 18, dx = mx - sx, dy = my - sy, dl = Math.hypot(dx, dy), nx = -dy / dl, ny = dx / dl;
-  c.fillStyle = W1; c.strokeStyle = W3; c.lineWidth = 3; c.beginPath(); c.moveTo(sx + nx * r1, sy + ny * r1); c.lineTo(mx + nx * R, my + ny * R); c.lineTo(mx - nx * R, my - ny * R); c.lineTo(sx - nx * r1, sy - ny * r1); c.closePath(); c.fill(); c.stroke();
-  c.strokeStyle = W2; c.lineWidth = 4; c.beginPath(); c.moveTo(sx + nx * r1 * .3, sy + ny * r1 * .3); c.lineTo(mx + nx * R * .3, my + ny * R * .3); c.stroke();
-  c.fillStyle = W1; c.strokeStyle = W3; c.lineWidth = 3; c.beginPath(); c.ellipse(385, 480, 66, 32, .22, 0, TAU); c.fill(); c.stroke();
-  c.beginPath(); for (let i = 0; i < 3; i++) { c.moveTo(352 + i * 22, 462 + i * 3); c.lineTo(356 + i * 22, 498 + i * 2); } c.stroke();
-  c.fillStyle = WH; c.strokeStyle = W3; c.lineWidth = 5; c.beginPath(); c.arc(mx, my, R, 0, TAU); c.fill(); c.stroke();
-  c.fillStyle = '#16161a'; c.beginPath(); c.arc(mx, my, R * .76, 0, TAU); c.fill();
-  c.fillStyle = '#000'; c.beginPath(); c.arc(mx, my, R * .55, 0, TAU); c.fill();
-  c.strokeStyle = W3; c.lineWidth = 2; c.beginPath(); c.arc(mx, my, R * .66, .4, 1.9); c.stroke();
-  c.fillStyle = W1; c.fillRect(mx - 6, my - R - 15, 12, 17);
-  if (flash > 0) {   // clarão do tiro
-    const g = c.createRadialGradient(mx, my, 0, mx, my, R * (2.6 + 3 * flash)); g.addColorStop(0, `rgba(255,255,255,${flash})`); g.addColorStop(1, 'rgba(255,255,255,0)');
-    c.fillStyle = g; c.beginPath(); c.arc(mx, my, R * (2.6 + 3 * flash), 0, TAU); c.fill();
-    c.fillStyle = `rgba(255,255,255,${flash})`; for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + .2, L = R * (3 + 3 * flash); c.beginPath(); c.moveTo(mx + Math.cos(a - .09) * R * .8, my + Math.sin(a - .09) * R * .8); c.lineTo(mx + Math.cos(a) * L, my + Math.sin(a) * L); c.lineTo(mx + Math.cos(a + .09) * R * .8, my + Math.sin(a + .09) * R * .8); c.closePath(); c.fill(); }
+  return out;
+})();
+
+/* ---- Chapéu de feltro em 3D (malha de quadriláteros girada e desenhada de trás para frente) ---- */
+const HAT = (() => {
+  const Q = [], N = 44, ez = 1.1, Hc = .92, Rb = 1.72;
+  const crownR = (f, ph) => 1 - .1 * f * f - .17 * f * f * Math.max(0, Math.cos(ph));        // afunila no topo, mais na frente (vinco)
+  const topY = (x, z) => Hc + .05 - .2 * Math.exp(-Math.pow(x / .45, 2)) * (.55 + .45 * Math.max(0, z / ez));
+  const wall = (f, ph, yTop, dr = 0) => { const r = crownR(f, ph) + dr; return [r * Math.sin(ph), f * yTop, r * ez * Math.cos(ph)]; };
+  const yTopOf = ph => { const r = crownR(1, ph); return topY(r * Math.sin(ph), r * ez * Math.cos(ph)); };
+  const quad = (a, b, c, d, t) => Q.push({ v: [a, b, c, d], t });
+  for (let i = 0; i < N; i++) {
+    const p0 = i / N * TAU, p1 = (i + 1) / N * TAU, y0 = yTopOf(p0), y1 = yTopOf(p1);
+    const K = 9; for (let j = 0; j < K; j++) { const f0 = j / K, f1 = (j + 1) / K; quad(wall(f0, p0, y0), wall(f0, p1, y1), wall(f1, p1, y1), wall(f1, p0, y0), 'f'); }
+    for (const [fa, fb] of [[.1, .16], [.16, .22], [.22, .28], [.28, .34]]) quad(wall(fa, p0, y0, .022), wall(fa, p1, y1, .022), wall(fb, p1, y1, .022), wall(fb, p0, y0, .022), 'r');
+    const S = 6, top = (s, ph, yt) => { const r = crownR(1, ph), x = s * r * Math.sin(ph), z = s * r * ez * Math.cos(ph); return [x, topY(x, z), z]; };
+    for (let j = 0; j < S; j++) { const s0 = 1 - j / S, s1 = 1 - (j + 1) / S; quad(top(s0, p0), top(s0, p1), top(s1, p1), top(s1, p0), 'f'); }
+    const brim = (u, ph, dy) => { const r = 1 + u * (Rb - 1); return [r * Math.sin(ph), -.09 * u * u * Math.cos(2 * ph) + dy, r * ez * Math.cos(ph)]; };
+    const B = 7; for (let j = 0; j < B; j++) { const u0 = j / B, u1 = (j + 1) / B; quad(brim(u0, p0, .02), brim(u0, p1, .02), brim(u1, p1, .02), brim(u1, p0, .02), 'f'); quad(brim(u0, p0, -.035), brim(u0, p1, -.035), brim(u1, p1, -.035), brim(u1, p0, -.035), 'u'); }
+    quad(brim(1, p0, .02), brim(1, p1, .02), brim(1, p1, -.035), brim(1, p0, -.035), 'f');
+  }
+  const ph = .8, bw = .07; quad(wall(.12, ph - bw, yTopOf(ph), .04), wall(.12, ph + bw, yTopOf(ph), .04), wall(.31, ph + bw, yTopOf(ph), .04), wall(.31, ph - bw, yTopOf(ph), .04), 'b');
+  return Q;
+})();
+function drawHat(c, cx, cy, hs, yaw, pitch, roll, a) {
+  const cy_ = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+  const tf = p => { let x = p[0] * cy_ + p[2] * sy, z = -p[0] * sy + p[2] * cy_, y = p[1]; const y2 = y * cp - z * sp, z2 = y * sp + z * cp; return [x * cr - y2 * sr, x * sr + y2 * cr, z2]; };
+  const L = [-.45, .7, .55], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
+  const list = [];
+  for (const q of HAT) {
+    const v = q.v.map(tf), n = [(v[1][1] - v[0][1]) * (v[3][2] - v[0][2]) - (v[1][2] - v[0][2]) * (v[3][1] - v[0][1]), (v[1][2] - v[0][2]) * (v[3][0] - v[0][0]) - (v[1][0] - v[0][0]) * (v[3][2] - v[0][2]), (v[1][0] - v[0][0]) * (v[3][1] - v[0][1]) - (v[1][1] - v[0][1]) * (v[3][0] - v[0][0])];
+    const nl = Math.hypot(n[0], n[1], n[2]) || 1; let nx = n[0] / nl, ny = n[1] / nl, nz = n[2] / nl; if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    list.push({ v, t: q.t, d: (v[0][2] + v[1][2] + v[2][2] + v[3][2]) / 4, nx, ny, nz });
+  }
+  list.sort((p, q) => p.d - q.d);
+  c.save(); c.globalAlpha = a; c.lineJoin = 'round';
+  for (const f of list) {
+    const dif = Math.max(0, f.nx * L[0] + f.ny * L[1] + f.nz * L[2]), rim = Math.pow(1 - f.nz, 2.2), hx = L[0], hy = L[1], hz = L[2] + 1, hl = Math.hypot(hx, hy, hz), sp2 = Math.pow(Math.max(0, (f.nx * hx + f.ny * hy + f.nz * hz) / hl), 26);
+    let r, g, b;
+    if (f.t === 'r') { r = 22 + 36 * dif + 30 * rim; g = 25 + 38 * dif + 32 * rim; b = 32 + 46 * dif + 40 * rim; }
+    else if (f.t === 'b') { r = 120 + 100 * dif + 80 * sp2; g = 126 + 100 * dif + 80 * sp2; b = 138 + 100 * dif + 80 * sp2; }
+    else if (f.t === 'u') { r = 7 + 14 * dif; g = 8 + 15 * dif; b = 11 + 18 * dif; }
+    else { r = 8 + 30 * dif + 30 * rim + 60 * sp2; g = 9 + 32 * dif + 32 * rim + 60 * sp2; b = 13 + 40 * dif + 42 * rim + 64 * sp2; }
+    const col = `rgb(${r | 0},${g | 0},${b | 0})`; c.fillStyle = col; c.strokeStyle = col; c.lineWidth = .8;
+    c.beginPath(); f.v.forEach((p, i) => { const X = cx + p[0] * hs, Y = cy - p[1] * hs; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); c.fill(); c.stroke();
+  }
+  c.restore();
+}
+
+/* ---- Pedaços do homem (cinza, estilo noir; tudo em 800 x 600) ---- */
+function drawSmoke(c, t, x, y, a, n) {
+  for (let i = 0; i < n; i++) {
+    const age = (t * .22 + i / n) % 1, px = x + Math.sin(i * 2.7 + t * .8) * 26 * age + age * 38, py = y - age * 210, r = 14 + age * 62, al = Math.sin(age * Math.PI) * .2 * a;
+    const g = c.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, `rgba(235,235,240,${al})`); g.addColorStop(1, 'rgba(235,235,240,0)'); c.fillStyle = g; c.beginPath(); c.arc(px, py, r, 0, TAU); c.fill();
   }
 }
+function drawMan(c, a, eyeA, t) {
+  if (a <= 0) return;
+  c.save(); c.globalAlpha = a; c.lineCap = 'round'; c.lineJoin = 'round';
+  // casaco e ombros
+  const coat = c.createLinearGradient(0, 430, 800, 640); coat.addColorStop(0, '#0b0c0f'); coat.addColorStop(.6, '#15171c'); coat.addColorStop(1, '#25282f');
+  c.fillStyle = coat; c.strokeStyle = 'rgba(70,75,88,.55)'; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(-160, 640); c.bezierCurveTo(-90, 520, 150, 452, 345, 434); c.lineTo(455, 434); c.bezierCurveTo(650, 452, 890, 520, 960, 640); c.closePath(); c.fill(); c.stroke();
+  // camisa, gravata e lapelas
+  c.fillStyle = '#c9c9cc'; c.beginPath(); c.moveTo(352, 428); c.lineTo(400, 492); c.lineTo(448, 428); c.lineTo(436, 424); c.lineTo(400, 450); c.lineTo(364, 424); c.closePath(); c.fill();
+  c.fillStyle = '#08080a'; c.beginPath(); c.moveTo(392, 452); c.lineTo(408, 452); c.lineTo(418, 560); c.lineTo(400, 580); c.lineTo(382, 560); c.closePath(); c.fill();
+  c.fillStyle = '#101216'; c.strokeStyle = '#4a4e59'; c.lineWidth = 2.4;
+  for (const m of [-1, 1]) { c.beginPath(); c.moveTo(400 + m * 6, 494); c.lineTo(400 + m * 62, 436); c.lineTo(400 + m * 112, 450); c.lineTo(400 + m * 70, 600); c.lineTo(400 + m * 24, 640); c.closePath(); c.fill(); c.stroke(); }
+  // pescoço
+  const nk = c.createLinearGradient(350, 0, 450, 0); nk.addColorStop(0, '#272727'); nk.addColorStop(1, '#8c8c8c'); c.fillStyle = nk; c.beginPath(); c.moveTo(364, 390); c.lineTo(436, 390); c.lineTo(440, 438); c.lineTo(400, 462); c.lineTo(360, 438); c.closePath(); c.fill();
+  // orelhas e rosto
+  c.fillStyle = '#3a3a3a'; for (const m of [-1, 1]) { c.beginPath(); c.ellipse(400 + m * 60, 332, 9, 21, 0, 0, TAU); c.fill(); }
+  const fc = c.createLinearGradient(338, 0, 462, 0); fc.addColorStop(0, '#202020'); fc.addColorStop(.45, '#6d6d6d'); fc.addColorStop(1, '#c4c4c4');
+  c.fillStyle = fc; c.beginPath(); c.ellipse(400, 330, 59, 86, 0, 0, TAU); c.fill();
+  c.save(); c.beginPath(); c.ellipse(400, 330, 59, 86, 0, 0, TAU); c.clip();
+  const jw = c.createLinearGradient(0, 360, 0, 420); jw.addColorStop(0, 'rgba(0,0,0,0)'); jw.addColorStop(1, 'rgba(0,0,0,.55)'); c.fillStyle = jw; c.fillRect(330, 350, 140, 80);
+  const br = c.createLinearGradient(0, 238, 0, 312); br.addColorStop(0, 'rgba(0,0,0,.97)'); br.addColorStop(.7, 'rgba(0,0,0,.85)'); br.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = br; c.fillRect(330, 236, 140, 80);   // sombra da aba
+  c.restore();
+  // olhos (só aparecem quando ele olha de leve para a tela)
+  if (eyeA > 0) {
+    c.globalAlpha = a * eyeA; const look = Math.sin(clamp((t - 2.2) / .5, 0, 1) * Math.PI) * 4 * (1 - clamp((t - 2.7) / .3, 0, 1));
+    for (const m of [-1, 1]) { const ex = 400 + m * 24, ey = 298; c.fillStyle = '#e9e9e9'; c.beginPath(); c.ellipse(ex, ey, 11, 3.6, 0, 0, TAU); c.fill(); c.fillStyle = '#050505'; c.beginPath(); c.arc(ex + look * m * .5 + (m > 0 ? -1 : 1) * 0, ey, 3.2, 0, TAU); c.fill(); c.strokeStyle = 'rgba(0,0,0,.85)'; c.lineWidth = 3; c.beginPath(); c.moveTo(ex - 15, ey - 7); c.lineTo(ex + 15, ey - 6); c.stroke(); }
+    c.globalAlpha = a;
+  }
+  // nariz, boca e queixo
+  c.strokeStyle = 'rgba(0,0,0,.55)'; c.lineWidth = 3; c.beginPath(); c.moveTo(396, 308); c.quadraticCurveTo(388, 336, 394, 346); c.moveTo(410, 346); c.quadraticCurveTo(418, 342, 420, 334); c.stroke();
+  c.strokeStyle = '#0c0c0c'; c.lineWidth = 3.4; c.beginPath(); c.moveTo(383, 372); c.quadraticCurveTo(398, 377, 416, 372); c.stroke();
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.beginPath(); c.ellipse(409, 395, 15, 6, 0, 0, TAU); c.fill();
+  // cigarro
+  c.save(); c.translate(414, 373); c.rotate(-.2); c.fillStyle = '#e8e8e8'; c.fillRect(0, -2.5, 58, 5); c.fillStyle = '#9a9a9a'; c.fillRect(0, -2.5, 8, 5);
+  const em = .6 + .4 * Math.sin(t * 3.1); const eg = c.createRadialGradient(60, 0, 0, 60, 0, 12); eg.addColorStop(0, `rgba(255,150,60,${em})`); eg.addColorStop(1, 'rgba(255,90,20,0)'); c.fillStyle = eg; c.beginPath(); c.arc(60, 0, 12, 0, TAU); c.fill(); c.restore();
+  drawSmoke(c, t, 482, 360, a, 7);
+  c.restore();
+}
+function drawSleeve(c, x, y, ang, grip) {   // braço de casaco vindo de fora da tela, com punho branco e mão
+  c.save(); c.translate(x, y); c.rotate(ang); c.lineCap = 'round'; c.lineJoin = 'round';
+  c.fillStyle = '#0d0e11'; c.strokeStyle = '#444853'; c.lineWidth = 3; c.beginPath(); c.moveTo(60, -52); c.lineTo(900, -86); c.lineTo(900, 120); c.lineTo(60, 62); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = '#d4d4d6'; c.strokeStyle = '#7a7a80'; c.lineWidth = 2; c.beginPath(); c.roundRect(40, -56, 34, 122, 6); c.fill(); c.stroke();
+  const hg = c.createLinearGradient(-60, -40, 40, 50); hg.addColorStop(0, '#767676'); hg.addColorStop(1, '#bdbdbd'); c.fillStyle = hg; c.strokeStyle = '#2a2a2a'; c.lineWidth = 2.4;
+  c.beginPath(); c.roundRect(-34, -42, 78, 86, 26); c.fill(); c.stroke();
+  const fingers = [[-62, -38], [-70, -14], [-68, 10], [-58, 32]];   // dedos fechando sobre a aba
+  fingers.forEach(([fx, fy], i) => { const cl = grip * 16; c.beginPath(); c.roundRect(fx + cl * .6, fy - 9 + i * .5, 52 - cl, 19, 9); c.fill(); c.stroke(); });
+  c.beginPath(); c.roundRect(-30, -62, 56, 22, 10); c.fill(); c.stroke();   // polegar
+  c.restore();
+}
+function drawGunFront(c, x, y, k, flash) {   // pistola vista de frente, apontada para quem olha (cinza), com os dedos na empunhadura
+  c.save(); c.translate(x, y); c.scale(k, k); c.lineCap = 'round'; c.lineJoin = 'round'; c.strokeStyle = '#1a1a1c'; c.lineWidth = 3;
+  const fg = c.createLinearGradient(-70, 0, 70, 0); fg.addColorStop(0, '#4c4c4c'); fg.addColorStop(.5, '#b9b9b9'); fg.addColorStop(1, '#707070');
+  c.fillStyle = fg; c.beginPath(); c.roundRect(-92, 30, 44, 124, 22); c.fill(); c.stroke(); c.beginPath(); c.roundRect(48, 30, 44, 124, 22); c.fill(); c.stroke();   // palma dos dois lados
+  for (let i = 0; i < 3; i++) { c.beginPath(); c.roundRect(-64 + i * 3, 74 + i * 33, 128 - i * 6, 31, 15); c.fill(); c.stroke(); }   // três dedos enrolados
+  c.fillStyle = '#2a2a2e'; c.beginPath(); c.roundRect(-30, 26, 60, 50, 10); c.fill(); c.stroke();   // armação
+  c.strokeStyle = '#0c0c0e'; c.lineWidth = 6; c.beginPath(); c.ellipse(0, 64, 20, 13, 0, 0, TAU); c.stroke();   // guarda-mato
+  c.strokeStyle = '#1a1a1c'; c.lineWidth = 3;
+  const sl = c.createLinearGradient(-50, 0, 50, 0); sl.addColorStop(0, '#6e6e74'); sl.addColorStop(.3, '#e4e4e8'); sl.addColorStop(1, '#4a4a50');
+  c.fillStyle = sl; c.beginPath(); c.roundRect(-50, -74, 100, 108, 16); c.fill(); c.stroke();   // ferrolho
+  c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.roundRect(-42, -68, 84, 9, 4); c.fill();
+  c.fillStyle = '#f0f0f0'; c.beginPath(); c.roundRect(-6, -92, 12, 20, 3); c.fill(); c.stroke();   // massa de mira
+  c.fillStyle = '#5a5a60'; c.beginPath(); c.arc(0, -14, 29, 0, TAU); c.fill(); c.stroke();
+  c.fillStyle = '#121214'; c.beginPath(); c.arc(0, -14, 21, 0, TAU); c.fill();
+  c.fillStyle = '#000'; c.beginPath(); c.arc(0, -14, 14, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 2; c.beginPath(); c.arc(0, -14, 18, .5, 1.8); c.stroke();
+  if (flash > 0) {
+    const R = 60 * (2.6 + 3 * flash), g = c.createRadialGradient(0, -14, 0, 0, -14, R); g.addColorStop(0, `rgba(255,255,255,${flash})`); g.addColorStop(.35, `rgba(255,236,190,${flash * .6})`); g.addColorStop(1, 'rgba(255,220,150,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(0, -14, R, 0, TAU); c.fill();
+    c.fillStyle = `rgba(255,255,255,${flash})`; for (let i = 0; i < 9; i++) { const a = i * TAU / 9 + .3, L = 60 * (3 + 3 * flash); c.beginPath(); c.moveTo(Math.cos(a - .1) * 30, -14 + Math.sin(a - .1) * 30); c.lineTo(Math.cos(a) * L, -14 + Math.sin(a) * L); c.lineTo(Math.cos(a + .1) * 30, -14 + Math.sin(a + .1) * 30); c.closePath(); c.fill(); }
+  }
+  c.restore();
+}
+
+/* ---- Cena completa. T < 0: antes do clique (só o chapéu). T >= 0: tempo desde o clique. ---- */
 function introScene(c, T, W, H) {
-  c.fillStyle = '#050507'; c.fillRect(0, 0, W, H);
+  const HC = hatClock(), pre = T < 0, t = Math.max(T, 0);
+  c.fillStyle = '#020203'; c.fillRect(0, 0, W, H);
   let kick = 0, flash = 0;
-  for (const s of SHOTS) { const q = T - s.t; if (q >= 0 && q < .6) kick = Math.max(kick, Math.exp(-q * 9)); if (q >= 0 && q < .14) flash = Math.max(flash, 1 - q / .14); }
-  const S = Math.min(W / 800, H / 600) * 1.08 * (1 + .07 * clamp(T / 2.2, 0, 1) - .035 * kick);
-  c.save(); c.translate(W / 2 + rnd(-1, 1) * kick * 10, H / 2 + (rnd(-1, 1) * 6 + 10) * kick); c.scale(S, S); c.translate(-400, -300);
-  drawOldWoman(c, T, kick, flash); c.restore();
-  const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .75); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.75)'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-  if (T < .6) { c.fillStyle = `rgba(0,0,0,${1 - T / .6})`; c.fillRect(0, 0, W, H); }
+  for (const s of SHOTS) { const q = T - s.t; if (q >= 0 && q < .6) kick = Math.max(kick, Math.exp(-q * 9)); if (q >= 0 && q < .12) flash = Math.max(flash, 1 - q / .12); }
+  const S = Math.min(W / 800, H / 600) * (1 + .05 * kick);
+  c.save(); c.translate(W / 2 + rnd(-1, 1) * kick * 10, H / 2 + rnd(-1, 1) * kick * 8); c.scale(S, S); c.translate(-400, -300);
+  // luz de cima (foco) e fumaça
+  const sp = c.createRadialGradient(400, 250, 20, 400, 250, 430); sp.addColorStop(0, 'rgba(255,255,255,.17)'); sp.addColorStop(.55, 'rgba(255,255,255,.05)'); sp.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sp; c.fillRect(-400, -300, 1600, 1200);
+  const cone = c.createLinearGradient(0, -100, 0, 640); cone.addColorStop(0, 'rgba(255,255,255,.08)'); cone.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = cone; c.beginPath(); c.moveTo(340, -100); c.lineTo(460, -100); c.lineTo(700, 640); c.lineTo(100, 640); c.closePath(); c.fill();
+  if (pre || t < 1.4) drawSmoke(c, HC * 1.3, 330, 540, .55 * (1 - sstep(.9, 1.6, t)), 8);
+  // posição do chapéu (flutua, gira, e depois a mão leva até a cabeça)
+  const floatK = 1 - sstep(.5, 1.1, t), bob = Math.sin(HC * 1.7) * 14 * floatK;
+  const I = x => { const a = .15, b = .9; if (x <= a) return x; const u = clamp((x - a) / (b - a), 0, 1); return a + (x - a) - (b - a) * (u * u * u - u * u * u * u / 2); };
+  const yawSpin = 1.15 * (HATC + I(t)), yawEnd = Math.round(1.15 * (HATC + I(.9)) / TAU) * TAU;
+  const yaw = pre ? 1.15 * HC : yawSpin + (yawEnd - 1.15 * (HATC + I(.9))) * easeInOut(clamp((t - .9) / 1, 0, 1)) * (t > .9 ? 1 : 0);
+  const carry = easeInOut(clamp((t - .8) / 1.1, 0, 1)), ax = 400, ay = 262 + bob;
+  const bx = 560, by = 380, ex = 400, ey = 272 - (t > 2.3 ? 9 * sstep(2.3, 2.7, t) : 0);
+  const hx = (1 - carry) * (1 - carry) * ax + 2 * (1 - carry) * carry * bx + carry * carry * ex, hy = (1 - carry) * (1 - carry) * ay + 2 * (1 - carry) * carry * by + carry * carry * ey;
+  const pitch = (.5 + .08 * Math.sin(HC * 1.3) * floatK) * (1 - carry) + .15 * carry, roll = Math.sin(HC * 1.1) * .13 * floatK * (1 - carry), hs = 112 - 14 * carry;
+  // homem
+  const manA = sstep(.9, 1.9, t), eyeA = sstep(2.2, 2.7, t);
+  if (!pre) drawMan(c, manA, eyeA, t);
+  // chapéu (atrás do cano da arma e da mão)
+  if (pre) { const glow = c.createRadialGradient(400, 262, 10, 400, 262, 250); glow.addColorStop(0, 'rgba(255,255,255,.07)'); glow.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = glow; c.fillRect(100, 0, 600, 560); }
+  drawHat(c, hx, hy, hs, yaw, pitch, roll, 1);
+  // mão: entra, pega a aba, leva o chapéu e sai
+  const hin = easeInOut(clamp((t - .15) / .65, 0, 1)), hout = easeInOut(clamp((t - 1.9) / .6, 0, 1));
+  if (!pre && t > .1 && hout < 1) {
+    const gx = hx + 128 * (hs / 112), gy = hy + 34;
+    const px = (1 - hin) * 1000 + hin * gx + hout * 700, py = (1 - hin) * 700 + hin * gy + hout * 520;
+    drawSleeve(c, px, py, Math.atan2(py - 700, px - 1000) * .0 + (.42 + .1 * hout), sstep(.7, 1, t) * (1 - hout));
+  }
+  // arma apontada para a tela
+  const gu = easeInOut(clamp((t - 2.55) / .55, 0, 1));
+  if (!pre && gu > 0) { const gk = 1.1 + .35 * kick; drawGunFront(c, 400, 760 - 220 * gu + 6 * kick, gk, flash); }
+  c.restore();
+  const vg = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .78); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.8)'); c.fillStyle = vg; c.fillRect(0, 0, W, H);
+  if (!pre && t < .25) { c.fillStyle = `rgba(0,0,0,${0})`; c.fillRect(0, 0, W, H); }
+  return flash;
+}
+function drawCracks(c, T, W, H) {   // trincas do vidro de cada tiro
   const D = Math.hypot(W, H);
-  SHOTS.forEach((s, i) => {   // trincas e borda de cada furo
+  SHOTS.forEach((s, i) => {
     if (T < s.t) return;
-    const R = s.r * D * easeOutExpo(clamp((T - s.t) / .4, 0, 1)), x = s.fx * W, y = s.fy * H;
-    c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 1.6;
-    for (const k of CRACKS[i]) {
-      c.beginPath();
-      [1, 1 + (k.l - 1) * .4, 1 + (k.l - 1) * .75, k.l].forEach((m, n) => { const rad = R * m, off = n ? k.j[n - 1] * D * .35 : 0, px = x + Math.cos(k.a) * rad - Math.sin(k.a) * off, py = y + Math.sin(k.a) * rad + Math.cos(k.a) * off; n ? c.lineTo(px, py) : c.moveTo(px, py); });
-      c.stroke();
+    const g = easeOutExpo(clamp((T - s.t) / .3, 0, 1)), x = s.fx * W, y = s.fy * H, cr = CRACKS[i];
+    const line = (pts) => { c.beginPath(); pts.forEach((p, n) => n ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); };
+    for (const pass of [0, 1]) {
+      c.strokeStyle = pass ? 'rgba(255,255,255,.82)' : 'rgba(0,0,0,.6)'; c.lineWidth = pass ? 1.2 : 2.8; const o = pass ? 0 : 1.5;
+      for (const k of cr.rays) {
+        const ca = Math.cos(k.a), sa = Math.sin(k.a), P = (l, off) => [x + (ca * l - sa * off) * D * g + o, y + (sa * l + ca * off) * D * g + o];
+        line([P(.012, 0), ...k.pts.map(p => P(p[0], p[1]))]);
+        if (k.br) { const b = k.pts[k.br.k], ba = k.a + k.br.a, bc = Math.cos(ba), bs = Math.sin(ba), st = P(b[0], b[1]); line([st, [st[0] + bc * k.br.l * D * g, st[1] + bs * k.br.l * D * g], [st[0] + bc * k.br.l * 1.7 * D * g, st[1] + bs * k.br.l * 1.7 * D * g + 6]]); }
+      }
+      for (const rg of cr.rings) {
+        if (g < rg.r / .3) continue;
+        for (let n = 0; n < 18; n++) if (rg.on[n]) { const a0 = n / 18 * TAU, a1 = (n + 1) / 18 * TAU, r0 = rg.r * D * (1 + rg.j[n]), r1 = rg.r * D * (1 + rg.j[(n + 1) % 18]); line([[x + Math.cos(a0) * r0 + o, y + Math.sin(a0) * r0 + o], [x + Math.cos(a1) * r1 + o, y + Math.sin(a1) * r1 + o]]); }
+      }
     }
-    c.lineWidth = 6; c.strokeStyle = '#fff'; c.beginPath(); c.arc(x, y, R, 0, TAU); c.stroke();
+    c.fillStyle = 'rgba(255,255,255,.9)'; c.beginPath(); c.arc(x, y, 11 * Math.min(1, g * 3), 0, TAU); c.fill();   // borda estilhaçada do furo
   });
 }
-const introSfx = { riser: false, shot: [false, false, false] };
+const introSfx = { riser: false, shot: [false, false, false, false, false], brk: false };
 function drawIntro(T) {
-  if (introGate && (!AC || (ac && ac.state === 'running'))) introGate = false;
-  if (introGate) {   // navegadores só liberam o som depois de um clique/toque: a abertura espera esse primeiro toque
-    const W = innerWidth, H = innerHeight;
-    ctx.fillStyle = '#050507'; ctx.fillRect(0, 0, W, H);
-    txt(TOUCH ? 'TOQUE PARA COMEÇAR' : 'CLIQUE PARA COMEÇAR', W / 2, H / 2, clamp(W / 28, 16, 26), `rgba(255,255,255,${.5 + .3 * Math.sin(performance.now() / 300)})`, 'center');
-    txt('ligue o som do aparelho', W / 2, H / 2 + 34, 12, 'rgba(255,255,255,.3)', 'center');
+  const W = innerWidth, H = innerHeight, D = Math.hypot(W, H), d = devicePixelRatio || 1;
+  if (IC.width !== canvas.width || IC.height !== canvas.height) { IC.width = canvas.width; IC.height = canvas.height; }
+  if (introGate) {   // antes do clique: chapéu flutuando e girando (o clique também libera o som do navegador)
+    ictx.setTransform(d, 0, 0, d, 0, 0); introScene(ictx, -1, W, H); ctx.drawImage(IC, 0, 0, W, H);
+    const pulse = .55 + .35 * Math.sin(performance.now() / 320), by = H - clamp(H * .11, 50, 90);
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 8;
+    txt(TOUCH ? 'TOQUE PARA COMEÇAR' : 'CLIQUE PARA COMEÇAR', W / 2, by, clamp(W / 30, 15, 24), `rgba(255,255,255,${pulse})`, 'center');
+    ctx.strokeStyle = `rgba(255,255,255,${pulse * .7})`; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; const ay = by + 26 + Math.sin(performance.now() / 320) * 3;
+    ctx.beginPath(); ctx.moveTo(W / 2 - 9, ay); ctx.lineTo(W / 2, ay + 8); ctx.lineTo(W / 2 + 9, ay); ctx.stroke(); ctx.restore();
+    txt('ligue o som do aparelho', W / 2, H - 16, 11, 'rgba(255,255,255,.3)', 'center');
     return;
   }
   if (ac) {
-    if (!introSfx.riser && T > .02) { introSfx.riser = true; sfxRiser(2.15); }
+    if (!introSfx.riser && T > .6) { introSfx.riser = true; sfxRiser(2.4); }
     SHOTS.forEach((sh, i) => { if (T >= sh.t && !introSfx.shot[i]) { introSfx.shot[i] = true; sfxShot(); sfxGlass(); } });
+    if (T >= BREAK_T && !introSfx.brk) { introSfx.brk = true; sfxGlass(); setTimeout(sfxGlass, 90); setTimeout(sfxGlass, 220); }
   }
   if (T >= INTRO_END) { skipIntro(); return; }
-  const W = innerWidth, H = innerHeight, D = Math.hypot(W, H), d = devicePixelRatio || 1;
-  if (IC.width !== canvas.width || IC.height !== canvas.height) { IC.width = canvas.width; IC.height = canvas.height; }
-  let kick = 0, fl = 0;
-  for (const s of SHOTS) { const q = T - s.t; if (q >= 0 && q < .6) kick = Math.max(kick, Math.exp(-q * 9)); if (q >= 0 && q < .22) fl = Math.max(fl, (1 - q / .22) * .85); }
-  ctx.fillStyle = '#050507'; ctx.fillRect(0, 0, W, H);
-  ctx.save(); ctx.translate(rnd(-1, 1) * kick * 9, rnd(-1, 1) * kick * 9);
-  if (T >= SHOTS[0].t) { drawMenu(T); ui = []; }   // o lobby aparece por trás dos furos
   ictx.setTransform(d, 0, 0, d, 0, 0); ictx.globalCompositeOperation = 'source-over'; ictx.clearRect(0, 0, W, H);
-  introScene(ictx, T, W, H);
-  ictx.globalCompositeOperation = 'destination-out'; ictx.fillStyle = '#000';
-  for (const s of SHOTS) if (T >= s.t) { ictx.beginPath(); ictx.arc(s.fx * W, s.fy * H, s.r * D * easeOutExpo(clamp((T - s.t) / .4, 0, 1)), 0, TAU); ictx.fill(); }
-  ctx.drawImage(IC, 0, 0, W, H);
-  ctx.restore();
-  if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl})`; ctx.fillRect(0, 0, W, H); }
-  if (T < SHOTS[0].t) txt(TOUCH ? 'toque para pular' : 'clique ou aperte uma tecla para pular', W / 2, H - 24, 12, 'rgba(255,255,255,.35)', 'center');
+  const flash = introScene(ictx, T, W, H);
+  if (T < BREAK_T) { drawCracks(ictx, T, W, H); ictx.globalCompositeOperation = 'destination-out'; ictx.fillStyle = '#000'; for (const s of SHOTS) if (T >= s.t) { ictx.beginPath(); ictx.arc(s.fx * W, s.fy * H, 3 + 3 * easeOutExpo(clamp((T - s.t) / .2, 0, 1)), 0, TAU); ictx.fill(); } ictx.globalCompositeOperation = 'source-over'; }
+  else drawCracks(ictx, BREAK_T - .001, W, H);
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, W, H);
+  if (T >= SHOTS[0].t) { drawMenu(T); ui = []; }   // o menu aparece por trás dos furos e, depois, do vidro quebrado
+  if (T < BREAK_T) ctx.drawImage(IC, 0, 0, W, H);
+  else {   // vidro estilhaçando: cada caco cai e gira
+    const u = T - BREAK_T, last = SHOTS[SHOTS.length - 1];
+    for (const s of SHARDS) {
+      const q = Math.max(0, u - s.dl * .5 - Math.hypot(s.cx - last.fx, s.cy - last.fy) * .12); if (q <= 0 && false) continue;
+      const al = 1 - sstep(.5, 1.7, q); if (al <= 0) continue;
+      const dx = (s.cx - last.fx) * .7 * q * W * .9 + s.vx * q * W, dy = (s.vy * q + 1.9 * q * q) * H * .55, rot = s.vr * q;
+      const xs = s.p.map(p => p[0] * W), ys = s.p.map(p => p[1] * H), bx0 = Math.min(...xs), by0 = Math.min(...ys), bw = Math.max(...xs) - bx0, bh = Math.max(...ys) - by0;
+      ctx.save(); ctx.globalAlpha = al; ctx.translate(s.cx * W + dx, s.cy * H + dy); ctx.rotate(rot); ctx.translate(-s.cx * W, -s.cy * H);
+      ctx.beginPath(); s.p.forEach((p, i) => i ? ctx.lineTo(p[0] * W, p[1] * H) : ctx.moveTo(p[0] * W, p[1] * H)); ctx.closePath(); ctx.clip();
+      ctx.drawImage(IC, bx0 * d, by0 * d, bw * d, bh * d, bx0, by0, bw, bh); ctx.restore();
+    }
+  }
+  if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * .75})`; ctx.fillRect(0, 0, W, H); }
+  if (T < SHOTS[0].t) txt(TOUCH ? 'toque para pular' : 'clique ou aperte uma tecla para pular', W / 2, H - 22, 11, 'rgba(255,255,255,.3)', 'center');
 }
 
 /* ------------------------------ PAUSA E OPÇÕES -------------------------- */
@@ -2984,6 +3152,19 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 95, v: '0.51.0', title: 'Nova abertura do chapéu',
+    criado: ['Nova abertura: um chapéu de feltro preto em 3D flutua e gira no escuro, com o aviso CLIQUE PARA COMEÇAR embaixo (o toque também libera o som do navegador).', 'Ao clicar, a mão de um homem pega o chapéu e o coloca na cabeça, ele olha de leve para a tela, acende o cigarro na sombra e dá 5 tiros. Cada tiro trinca o vidro da tela; no último, o vidro estilhaça e o menu aparece.'],
+    removido: ['A abertura antiga, da senhora de branco com 3 tiros.'] },
+  { n: 94, v: '0.50.2', title: 'Mais armas de verdade na opção MUITA',
+    modificado: [
+      'A quantidade de armas agora acompanha o tamanho do mapa e o número de lutadores. Antes eram só 3, 5 ou 9 armas num mapa enorme, e os bots pegavam quase tudo. Agora: POUCA (4 a 6 armas no início), MÉDIA (7 a 12) e MUITA (16 a 27), com reposição a cada 14 s, 8 s e 3,5 s. A opção ALTA virou MUITA.',
+      'Na tela de configuração a opção ARMAS mostra quantas armas aparecem no início.',
+    ],
+    criado: [
+      'Em MÉDIA e MUITA cada lutador larga com uma arma a poucos passos de distância.',
+      'As armas são espalhadas pelo mapa (sem ficar empilhadas), cada uma com um halo amarelo pulsante no chão para ser fácil de achar.',
+      'Quando você está desarmado, setas amarelas nas bordas da tela apontam para as 3 armas mais próximas que estão fora de vista.',
+    ] },
   { n: 93, v: '0.50.1', title: 'Novos sprites: canivete e soco-inglês',
     modificado: [
       'O canivete e o soco-inglês ganharam novos desenhos (cabo de madeira com batente prateado e lâmina cinza; soco-inglês preto com quatro argolas). Valem na mão, no chão, arremessados e no deslize, e também nas silhuetas do HUD e da tela ARMAS.',
