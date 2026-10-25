@@ -6,15 +6,39 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d0a14">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="screen-orientation" content="landscape">
+<meta name="x5-orientation" content="landscape">
+<meta name="x5-fullscreen" content="true">
 <title>OUTCOME</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0d0a14; overflow: hidden; overscroll-behavior: none; }
   canvas { display: block; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+
+  #fsGate { display: none; position: fixed; inset: 0; z-index: 99999; background: #0d0a14; color: #fff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; align-items: center; justify-content: center; flex-direction: column; text-align: center; padding: 24px; box-sizing: border-box; }
+  #fsGate.show { display: flex; }
+  #fsGate h1 { margin: 0 0 6px; font-size: 28px; letter-spacing: 6px; }
+  #fsGate p { margin: 8px 0 0; font-size: 14px; opacity: .75; max-width: 320px; line-height: 1.4; }
+  #fsGate button { margin-top: 18px; padding: 16px 34px; font-size: 18px; font-weight: 700; letter-spacing: 2px; color: #fff; background: #e0314b; border: 0; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+  #fsGate button.alt { background: transparent; border: 1px solid #ffffff55; font-size: 13px; padding: 10px 18px; font-weight: 500; letter-spacing: 0; opacity: .8; }
+  #fsGate .rot { display: none; font-size: 54px; margin-bottom: 8px; animation: fsrot 1.8s ease-in-out infinite; }
+  @keyframes fsrot { 0%,20% { transform: rotate(0); } 60%,100% { transform: rotate(-90deg); } }
+  @media (orientation: portrait) { #fsGate .rot { display: block; } }
+  #fsGate #fsIos { display: none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 <canvas id="game"></canvas>
+<div id="fsGate">
+  <div class="rot">📱</div>
+  <h1>OUTCOME</h1>
+  <p id="fsMsg">Gire o celular para a horizontal e toque no botão para jogar em tela cheia.</p>
+  <button id="fsBtn">TELA CHEIA</button>
+  <p id="fsIos">No iPhone o Safari não tem tela cheia por botão. Toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>; abrindo por esse ícone o jogo roda sem a barra de endereço.</p>
+  <button id="fsSkip" class="alt" style="display:none">Jogar mesmo assim</button>
+</div>
+
 <script>
 /* =====================================================================
    OUTCOME  |  partidas em rodadas, tela de configuração, abertura animada, histórico (veja UPDATES), celular
@@ -4516,6 +4540,47 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+</script>
+
+<script>
+/* ---- Tela cheia + horizontal travada (celular) ---- */
+(function () {
+  const gate = document.getElementById('fsGate'), btn = document.getElementById('fsBtn'), skip = document.getElementById('fsSkip'), ios = document.getElementById('fsIos');
+  const touchDev = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (!touchDev) return;
+  const de = document.documentElement;
+  const reqFs = de.requestFullscreen || de.webkitRequestFullscreen || de.msRequestFullscreen;
+  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const standalone = () => matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let skipped = false;
+
+  const lock = () => { try { const p = screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'); if (p && p.catch) p.catch(() => {}); } catch (e) {} };
+  const update = () => {
+    const ok = isFs() || standalone() || skipped;
+    gate.classList.toggle('show', !ok);
+    if (!reqFs) { btn.style.display = 'none'; ios.style.display = 'block'; skip.style.display = 'inline-block'; }
+    if (isFs() || standalone()) lock();
+    window.dispatchEvent(new Event('resize'));
+  };
+  btn.addEventListener('click', () => {
+    try { const p = reqFs.call(de, { navigationUI: 'hide' }); if (p && p.then) p.then(lock).catch(() => {}); else lock(); } catch (e) {}
+    setTimeout(lock, 300); setTimeout(update, 400);
+  });
+  skip.addEventListener('click', () => { skipped = true; update(); });
+  document.addEventListener('fullscreenchange', update);
+  document.addEventListener('webkitfullscreenchange', update);
+  matchMedia('(display-mode: fullscreen)').addEventListener && matchMedia('(display-mode: fullscreen)').addEventListener('change', update);
+  addEventListener('orientationchange', () => setTimeout(update, 200));
+  update();
+
+  /* Manifest embutido: se o jogador instalar na tela inicial, abre em tela cheia e horizontal, sem URL */
+  try {
+    const m = { name: 'OUTCOME', short_name: 'OUTCOME', start_url: location.href.split('#')[0], scope: location.href.replace(/[^\/]*$/, ''), display: 'fullscreen', orientation: 'landscape', background_color: '#0d0a14', theme_color: '#0d0a14' };
+    const l = document.createElement('link'); l.rel = 'manifest';
+    l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
+    document.head.appendChild(l);
+  } catch (e) {}
+})();
 </script>
 </body>
 </html>
