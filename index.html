@@ -2121,26 +2121,70 @@ function cornerBtn(label, side, W, H, fn, style) {
   const w = clamp(W * .16, 104, 170), h = 44, m = 16;
   button(label, side < 0 ? m : W - m - w, H - m - h, w, h, fn, style);
 }
+/* Fundo do lobby guardado numa imagem só (luz de holofote atrás do título + vinheta escura); só é refeito se a tela mudar de tamanho */
+let MBEAM = null;
+function menuBeam(IW, IH) {   // feixe de luz vindo de cima (como o da abertura) + mancha de luz no chão, guardados em imagens
+  const key = (IW | 0) + 'x' + (IH | 0); if (MBEAM && MBEAM.key === key) return MBEAM;
+  const Lb = Math.ceil(Math.max(IW, IH) * 1.15), w = Math.ceil(Lb * .62), bm = document.createElement('canvas'); bm.width = w; bm.height = Lb; const c = bm.getContext('2d');
+  try { c.filter = 'blur(10px)'; } catch (e) {}
+  const g = c.createLinearGradient(0, 0, 0, Lb); g.addColorStop(0, 'rgba(231,228,211,.2)'); g.addColorStop(.55, 'rgba(231,228,211,.07)'); g.addColorStop(1, 'rgba(231,228,211,0)'); c.fillStyle = g;
+  c.beginPath(); c.moveTo(w / 2 - Lb * .035, 0); c.lineTo(w / 2 + Lb * .035, 0); c.lineTo(w / 2 + Lb * .27, Lb); c.lineTo(w / 2 - Lb * .27, Lb); c.closePath(); c.fill();
+  const gl = document.createElement('canvas'); gl.width = gl.height = 256; const q = gl.getContext('2d'), r = q.createRadialGradient(128, 128, 4, 128, 128, 128); r.addColorStop(0, 'rgba(231,228,211,.2)'); r.addColorStop(1, 'rgba(231,228,211,0)'); q.fillStyle = r; q.fillRect(0, 0, 256, 256);
+  return MBEAM = { key, bm, gl, Lb, w };
+}
+let MBG = null, MENU_T0 = 0, MENU_LAST = -1e9;
+function menuBg(cxp, cyp, W, H, d) {
+  const key = [cxp | 0, cyp | 0, W, H, d].join(); if (MBG && MBG.key === key) return MBG.cv;
+  const cv = document.createElement('canvas'); cv.width = Math.round(W * d); cv.height = Math.round(H * d); const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0);
+  const vg = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .35, W / 2, H / 2, Math.max(W, H) * .8); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.75)'); c.fillStyle = vg; c.fillRect(0, 0, W, H);
+  MBG = { key, cv }; return cv;
+}
 function drawMenu(t) {
-  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms;
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
-  ctx.save(); ctx.scale(ms, ms);
+  const baseA = ctx.globalAlpha, ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, d = devicePixelRatio || 1;
+  const nowMs = performance.now(); if (nowMs - MENU_LAST > 300) MENU_T0 = nowMs; MENU_LAST = nowMs;   // a entrada animada recomeça sempre que o lobby reaparece
+  const el = (nowMs - MENU_T0) / 1000, ent = dl => easeOutExpo(clamp((el - dl) / .7, 0, 1)), sec = nowMs / 1000;
+  ctx.fillStyle = '#040406'; ctx.fillRect(0, 0, innerWidth, innerHeight);
   const cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', BW = 440, HW = (BW - 8) / 2, bx = cx - BW / 2;
   // o título cresce até a tinta das letras ocupar exatamente a largura do botão JOGAR (canto a canto)
   ctx.font = 'bold 100px "Courier New", monospace'; ctx.textAlign = 'left'; try { ctx.letterSpacing = '0px'; } catch (e) {}
   const mm = ctx.measureText('OUTCOME'), aL = mm.actualBoundingBoxLeft || 0, ink = mm.actualBoundingBoxRight !== undefined ? aL + mm.actualBoundingBoxRight : mm.width, ts = BW / (ink / 100 + 6 * .22);
   const y0 = Math.max(20, (IH - (ts + 224)) / 2);
+  // fundo: chão em grade que desliza devagar (igual ao chão das partidas), poeira subindo e luz de holofote atrás do título
+  ctx.save(); ctx.scale(ms, ms);
+  const T = 64, off = (sec * 7) % T; ctx.strokeStyle = 'rgba(255,255,255,.03)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = -off; x < IW + T; x += T) { ctx.moveTo(Math.round(x) + .5, 0); ctx.lineTo(Math.round(x) + .5, IH); }
+  for (let y = -off; y < IH + T; y += T) { ctx.moveTo(0, Math.round(y) + .5); ctx.lineTo(IW, Math.round(y) + .5); }
+  ctx.stroke();
+  ctx.fillStyle = INK;
+  for (let n = 0; n < 26; n++) {
+    const sd = n * 97.13, fr = v => v - Math.floor(v), px = fr(Math.sin(sd) * 43758.5) * IW + Math.sin(sec * .3 + sd) * 14, spd = 6 + fr(sd * 7.1) * 12, py = IH - ((sec * spd + fr(sd * 3.7) * IH) % IH);
+    ctx.globalAlpha = baseA * (.05 + .12 * fr(sd * 5.3)) * Math.sin(Math.PI * py / IH) * ent(.2); ctx.fillRect(px, py, 1 + (n % 3 === 0), 1 + (n % 3 === 0));
+  }
+  ctx.globalAlpha = baseA; ctx.restore();
+  {   // luz: um feixe que balança devagar de um lado para o outro, passando por cima do título, com a mancha de luz no chão acompanhando
+    const MB = menuBeam(IW, IH), ang = Math.sin(sec * .4) * .3, ax = IW / 2 + Math.sin(sec * .23 + 1) * IW * .1, Lp = y0 + ts * .8 + 20;
+    ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * (.85 + .15 * Math.sin(sec * 1.3));
+    ctx.save(); ctx.translate(ax, -12); ctx.rotate(-ang); ctx.drawImage(MB.bm, -MB.w / 2, 0); ctx.restore();
+    const gw = Math.min(IW, 760), px = ax + Math.sin(ang) * Lp; ctx.globalAlpha *= .9; ctx.drawImage(MB.gl, px - gw / 2, Lp - gw * .17, gw, gw * .34);
+    ctx.restore(); ctx.globalAlpha = baseA;
+  }
+  ctx.drawImage(menuBg(0, 0, innerWidth, innerHeight, d), 0, 0, innerWidth, innerHeight);   // escurece as bordas
+  ctx.save(); ctx.scale(ms, ms);
+  // título: desce e aparece; uma linha fina se abre embaixo
+  const eT = ent(0); ctx.globalAlpha = baseA * eT;
   try { ctx.letterSpacing = (ts * .22) + 'px'; } catch (e) {}
-  txt('OUTCOME', bx + aL * ts / 100, y0 + ts / 2, ts, INK, 'left');
+  txt('OUTCOME', bx + aL * ts / 100, y0 + ts / 2 - (1 - eT) * 22, ts, INK, 'left');
   try { ctx.letterSpacing = '0px'; } catch (e) {}
+  const lw = BW * ent(.25); ctx.strokeStyle = 'rgba(231,228,211,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - lw / 2, y0 + ts + 22.5); ctx.lineTo(cx + lw / 2, y0 + ts + 22.5); ctx.stroke();
   let y = y0 + ts + 48;
-  // botões largos (JOGAR, TREINAMENTO) e pares lado a lado, todos alinhados
-  button('JOGAR', bx, y, BW, 56, () => setState('modes'), 'primary');
-  button('ARMAS', bx, y + 68, HW, 48, () => { resetPicker(INFO); setState('info'); });
-  button('PERSONAGENS', bx + HW + 8, y + 68, HW, 48, () => { resetPicker(CHP); setState('chars'); });
-  button('ATUALIZAÇÃO', bx, y + 128, HW, 48, () => { logScroll = 0; setState('log'); });
-  button('OPÇÕES', bx + HW + 8, y + 128, HW, 48, () => { optBack = 'menu'; setState('options'); });
-  txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right');   // contador de versão (só no lobby)
+  // botões largos (JOGAR, TREINAMENTO) e pares lado a lado, todos alinhados; cada um sobe e aparece em sequência
+  const B = (n, fn) => { const e = ent(.3 + n * .08); ctx.globalAlpha = baseA * e; fn((1 - e) * 18); ctx.globalAlpha = baseA; };
+  B(0, o => button('JOGAR', bx, y + o, BW, 56, () => setState('modes'), 'primary'));
+  B(1, o => button('ARMAS', bx, y + 68 + o, HW, 48, () => { resetPicker(INFO); setState('info'); }));
+  B(2, o => button('PERSONAGENS', bx + HW + 8, y + 68 + o, HW, 48, () => { resetPicker(CHP); setState('chars'); }));
+  B(3, o => button('ATUALIZAÇÃO', bx, y + 128 + o, HW, 48, () => { logScroll = 0; setState('log'); }));
+  B(4, o => button('OPÇÕES', bx + HW + 8, y + 128 + o, HW, 48, () => { optBack = 'menu'; setState('options'); }));
+  ctx.globalAlpha = baseA * ent(.8); txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right'); ctx.globalAlpha = baseA;   // contador de versão (só no lobby)
   ctx.restore();
 }
 
@@ -2615,7 +2659,7 @@ const HAT = (() => {
   const add = (v, k, t) => Q.push({ v, k, t });   // k = tipo (orienta a normal) | t = classe de cor
   for (let i = 0; i < N; i++) {
     const p0 = i / N * TAU, p1 = (i + 1) / N * TAU, y0 = yTopOf(p0), y1 = yTopOf(p1);
-    const K = 9; for (let j = 0; j < K; j++) { const f0 = j / K, f1 = (j + 1) / K; add([wall(f0, p0, y0), wall(f0, p1, y1), wall(f1, p1, y1), wall(f1, p0, y0)], 'w', 'f'); }
+    const K = 9; for (let j = 0; j < K; j++) { const f0 = j / K, f1 = (j + 1) / K, bd = j === 1 || j === 2 ? .02 : 0; add([wall(f0, p0, y0, bd), wall(f0, p1, y1, bd), wall(f1, p1, y1, bd), wall(f1, p0, y0, bd)], 'w', bd ? 'g' : 'f'); }   // j 1 e 2 = faixa preta (fita) em volta da copa
     const S = 7; for (let j = 0; j < S; j++) { const s0 = 1 - j / S, s1 = 1 - (j + 1) / S; add([top(s0, p0), top(s0, p1), top(s1, p1), top(s1, p0)], 't', 'f'); }
     const B = 8; for (let j = 0; j < B; j++) { const u0 = j / B, u1 = (j + 1) / B; add([brim(u0, p0, .02), brim(u0, p1, .02), brim(u1, p1, .02), brim(u1, p0, .02)], 't', 'f'); add([brim(u0, p0, -.035), brim(u0, p1, -.035), brim(u1, p1, -.035), brim(u1, p0, -.035)], 'b', 'u'); }
     add([brim(1, p0, .02), brim(1, p1, .02), brim(1, p1, -.035), brim(1, p0, -.035)], 'w', 'f');
@@ -2631,26 +2675,59 @@ const HAT = (() => {
   for (const q of Q) { const s = [0, 0, 0]; for (const p of q.v) { const a = acc.get(key(p, q.t)); s[0] += a[0]; s[1] += a[1]; s[2] += a[2]; } const l = Math.hypot(...s) || 1; q.n = s.map(x => x / l); }
   return Q;
 })();
+/* Chapéu otimizado: a malha é copiada uma vez para vetores numéricos, a ordenação usa um vetor de chaves nativo (sem objetos novos por quadro)
+   e as cores prontas são reaproveitadas. O desenho final é idêntico ao da versão anterior. */
+let HATP = null; const HCOL = [];
+function hatPrep() {
+  const n = HAT.length, V = new Float64Array(n * 12), N = new Float64Array(n * 3), T = new Uint8Array(n);
+  HAT.forEach((q, i) => { for (let v = 0; v < 4; v++) for (let k = 0; k < 3; k++) V[i * 12 + v * 3 + k] = q.v[v][k]; for (let k = 0; k < 3; k++) N[i * 3 + k] = q.n[k]; T[i] = q.t === 'u' ? 1 : q.t === 'g' ? 2 : 0; });
+  return HATP = { n, V, N, T, SX: new Float64Array(n * 4), SY: new Float64Array(n * 4), KC: new Int32Array(n), keys: new Float64Array(n) };
+}
 function drawHat(c, cx, cy, hs, yaw, pitch, roll, a) {
+  const P = HATP || hatPrep(), { n, V, N, T, SX, SY, KC, keys } = P;
   const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
-  const rot = (x, y, z) => { const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp; return [x1 * cr - y2 * sr, x1 * sr + y2 * cr, z2]; };
-  const L = [-.45, .7, .55], ll = Math.hypot(...L); L[0] /= ll; L[1] /= ll; L[2] /= ll;
-  const list = [];
-  for (const q of HAT) {
-    const n = rot(q.n[0], q.n[1], q.n[2]); if (n[2] < -.05) continue;   // face de costas: não aparece
-    const v = q.v.map(p => rot(p[0], p[1], p[2]));
-    list.push({ v, t: q.t, d: (v[0][2] + v[1][2] + v[2][2] + v[3][2]) / 4, n });
+  const L0 = -.45, L1 = .7, L2 = .55, ll = Math.hypot(L0, L1, L2), lx = L0 / ll, ly = L1 / ll, lz = L2 / ll, hz = lz + 1, hl = Math.hypot(lx, ly, hz);
+  let m = 0;
+  for (let i = 0; i < n; i++) {
+    const a0 = N[i * 3], a1 = N[i * 3 + 1], a2 = N[i * 3 + 2];
+    const nx1 = a0 * cyw + a2 * syw, nz1 = -a0 * syw + a2 * cyw, ny2 = a1 * cp - nz1 * sp, nz2 = a1 * sp + nz1 * cp;
+    if (nz2 < -.05) continue;   // face de costas: não aparece
+    const nx = nx1 * cr - ny2 * sr, ny = nx1 * sr + ny2 * cr, nz = Math.max(0, nz2);
+    let dz = 0;
+    for (let v = 0; v < 4; v++) {
+      const x = V[i * 12 + v * 3], y = V[i * 12 + v * 3 + 1], z = V[i * 12 + v * 3 + 2];
+      const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+      SX[m * 4 + v] = cx + (x1 * cr - y2 * sr) * hs; SY[m * 4 + v] = cy - (x1 * sr + y2 * cr) * hs; dz += z2;
+    }
+    const dif = Math.max(0, nx * lx + ny * ly + nz * lz), rim = Math.pow(1 - nz, 2.4), sp2 = Math.pow(Math.max(0, (nx * lx + ny * ly + nz * hz) / hl), 30), t = T[i];
+    const k = t === 1 ? 3 + 8 * dif : t === 2 ? 2 + 12 * dif + 30 * rim + 9 * sp2 : 4 + 22 * dif + 24 * rim + 40 * sp2;   // preto de feltro / fita da faixa / parte de baixo da aba
+    const ki = k | 0, bb = ((k + 1.5) | 0) - ki, ci = ki * 2 + (bb - 1);
+    if (!HCOL[ci]) HCOL[ci] = `rgb(${ki},${ki},${ki + bb})`;
+    KC[m] = ci; keys[m] = Math.floor((dz / 4 + 8) * 1e6) * 4096 + m; m++;
   }
-  list.sort((p, q) => p.d - q.d);
-  c.save(); c.globalAlpha = a; c.lineJoin = 'round';
-  for (const f of list) {
-    const nx = f.n[0], ny = f.n[1], nz = Math.max(0, f.n[2]);
-    const dif = Math.max(0, nx * L[0] + ny * L[1] + nz * L[2]), rim = Math.pow(1 - nz, 2.4), hz = L[2] + 1, hl = Math.hypot(L[0], L[1], hz), sp2 = Math.pow(Math.max(0, (nx * L[0] + ny * L[1] + nz * hz) / hl), 30);
-    const k = f.t === 'u' ? 3 + 8 * dif : 4 + 22 * dif + 24 * rim + 40 * sp2;   // preto de feltro: quase sem cor, só um brilho de borda
-    const col = `rgb(${k | 0},${k | 0},${(k + 1.5) | 0})`; c.fillStyle = col; c.strokeStyle = col; c.lineWidth = .9;
-    c.beginPath(); f.v.forEach((p, i) => { const X = cx + p[0] * hs, Y = cy - p[1] * hs; i ? c.lineTo(X, Y) : c.moveTo(X, Y); }); c.closePath(); c.fill(); c.stroke();
+  const ks = keys.subarray(0, m); ks.sort();
+  c.save(); c.globalAlpha = a; c.lineJoin = 'round'; c.lineWidth = .9;
+  let lastC = -1;
+  for (let q = 0; q < m; q++) {
+    const j = ks[q] % 4096, ci = KC[j];
+    if (ci !== lastC) { c.fillStyle = c.strokeStyle = HCOL[ci]; lastC = ci; }
+    c.beginPath(); c.moveTo(SX[j * 4], SY[j * 4]); c.lineTo(SX[j * 4 + 1], SY[j * 4 + 1]); c.lineTo(SX[j * 4 + 2], SY[j * 4 + 2]); c.lineTo(SX[j * 4 + 3], SY[j * 4 + 3]); c.closePath(); c.fill(); c.stroke();
   }
   c.restore();
+}
+
+/* Fundo da abertura (antes do clique) pronto numa imagem só: o fundo com os feixes de luz e a vinheta ficam guardados e só são redesenhados se a tela mudar de tamanho */
+let PRE = null;
+function preBg(W, H, d) {
+  const key = W + 'x' + H + 'x' + d; if (PRE && PRE.key === key) return PRE;
+  const mk = () => { const cv = document.createElement('canvas'); cv.width = Math.round(W * d); cv.height = Math.round(H * d); const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); return [cv, c]; };
+  const [bg, c] = mk(), S = Math.min(W / 800, H / 600);
+  c.fillStyle = '#020203'; c.fillRect(0, 0, W, H); c.save(); c.translate(W / 2, H / 2); c.scale(S, S); c.translate(-400, -300);
+  const sp = c.createRadialGradient(400, 250, 20, 400, 250, 430); sp.addColorStop(0, 'rgba(255,255,255,.17)'); sp.addColorStop(.55, 'rgba(255,255,255,.05)'); sp.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = sp; c.fillRect(-400, -300, 1600, 1200);
+  const cone = c.createLinearGradient(0, -100, 0, 640); cone.addColorStop(0, 'rgba(255,255,255,.08)'); cone.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = cone; c.beginPath(); c.moveTo(340, -100); c.lineTo(460, -100); c.lineTo(700, 640); c.lineTo(100, 640); c.closePath(); c.fill();
+  c.restore();
+  const [vg, v] = mk(), g = v.createRadialGradient(W / 2, H / 2, Math.min(W, H) * .3, W / 2, H / 2, Math.max(W, H) * .78); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.8)'); v.fillStyle = g; v.fillRect(0, 0, W, H);
+  return PRE = { key, bg, vg, S };
 }
 
 /* ---- O homem: só silhueta (como no filme noir), com luz de contorno; rosto sempre na sombra. Tudo em 800 x 600. ---- */
@@ -2733,7 +2810,7 @@ function introScene(c, T, W, H) {
   const ax = 400, ay = 262 + bob, bx = 580, by = 390, ex = 400, ey = 244;
   let hx = (1 - carry) * (1 - carry) * ax + 2 * (1 - carry) * carry * bx + carry * carry * ex, hy = (1 - carry) * (1 - carry) * ay + 2 * (1 - carry) * carry * by + carry * carry * ey;
   hy += (292 - 244) * dropE - 9 * sstep(3.1, 3.5, t);   // assenta na testa; no olhar, a aba sobe um pouquinho
-  const pitch = (.5 + .08 * Math.sin(HC * 1.3) * floatK) * (1 - carry) + (.15 - .1 * sstep(3.1, 3.5, t)) * carry, roll = Math.sin(HC * 1.1) * .13 * floatK * (1 - carry), hs = 112 - 42 * carry;
+  const pitch = (.5 + .08 * Math.sin(HC * 1.3) * floatK) * (1 - carry) + (.15 - .1 * sstep(3.1, 3.5, t)) * carry, roll = Math.sin(HC * 1.1) * .13 * floatK * (1 - carry), hs = (112 - 42 * carry) * .78;
   const manA = sstep(.9, 2.2, t), eyeA = sstep(3.1, 3.6, t);
   if (!pre) drawMan(c, manA, eyeA, t);
   drawHat(c, hx, hy, hs, yaw, pitch, roll, 1);
@@ -2810,13 +2887,33 @@ function drawIntro(T) {
   const W = innerWidth, H = innerHeight, d = devicePixelRatio || 1;
   if (IC.width !== canvas.width || IC.height !== canvas.height) { IC.width = canvas.width; IC.height = canvas.height; SHARD = null; }
   if (introGate) {   // antes do clique: chapéu flutuando e girando (o clique também libera o som do navegador)
-    ictx.setTransform(d, 0, 0, d, 0, 0); introScene(ictx, -1, W, H); ctx.drawImage(IC, 0, 0, W, H);
+    const PB = preBg(W, H, d), HC = hatClock(); ctx.drawImage(PB.bg, 0, 0, W, H);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(PB.S, PB.S); ctx.translate(-400, -300);
+    drawHat(ctx, 400, 262 + Math.sin(HC * 1.7) * 14, 112 * .78, 1.15 * HC, .5 + .08 * Math.sin(HC * 1.3), Math.sin(HC * 1.1) * .13, 1);
+    ctx.restore(); ctx.drawImage(PB.vg, 0, 0, W, H);
     const pulse = .55 + .35 * Math.sin(performance.now() / 320), by = H - clamp(H * .11, 50, 90);
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 8;
-    txt(TOUCH ? 'TOQUE PARA COMEÇAR' : 'CLIQUE PARA COMEÇAR', W / 2, by, clamp(W / 30, 15, 24), `rgba(255,255,255,${pulse})`, 'center');
+    txt(TOUCH ? 'TOQUE PARA COMEÇAR' : 'CLIQUE PARA COMEÇAR', W / 2, by, clamp(W / 38, 12, 19), `rgba(255,255,255,${pulse})`, 'center');
     ctx.strokeStyle = `rgba(255,255,255,${pulse * .7})`; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; const ay = by + 26 + Math.sin(performance.now() / 320) * 3;
-    ctx.beginPath(); ctx.moveTo(W / 2 - 9, ay); ctx.lineTo(W / 2, ay + 8); ctx.lineTo(W / 2 + 9, ay); ctx.stroke(); ctx.restore();
-    txt('ligue o som do aparelho', W / 2, H - 16, 11, 'rgba(255,255,255,.3)', 'center');
+    ctx.beginPath(); ctx.moveTo(W / 2 - 7, ay); ctx.lineTo(W / 2, ay + 6); ctx.lineTo(W / 2 + 7, ay); ctx.stroke(); ctx.restore();
+    return;
+  }
+  /* Depois do clique: só o chapéu. Ele gira cada vez mais rápido, sobe e voa para cima da tela enquanto o menu aparece por trás, crescendo de leve. */
+  {
+    const OUT = 1.25, u = clamp(T / OUT, 0, 1), e = u * u * (3 - 2 * u);
+    if (T >= OUT) { skipIntro(); return; }
+    if (ac && !introSfx.riser) { introSfx.riser = true; try { sfxRiser(.7); } catch (er) {} }
+    ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, W, H);
+    ctx.save(); const z = 1.12 - .12 * easeOutExpo(u); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); ctx.globalAlpha = sstep(.2, .85, u);
+    drawMenu(T); ui = []; ctx.restore();
+    ctx.globalAlpha = 1;
+    const HC = hatClock(), S = Math.min(W / 800, H / 600);
+    ictx.setTransform(d, 0, 0, d, 0, 0); ictx.clearRect(0, 0, W, H);
+    ictx.save(); ictx.translate(W / 2, H / 2); ictx.scale(S, S); ictx.translate(-400, -300);
+    const bob = Math.sin(HC * 1.7) * 14 * (1 - u), yaw = 1.15 * HC + 16 * u * u * u, hs = 112 * .78 + 780 * e * e, hy = 262 + bob - 70 * e;
+    drawHat(ictx, 400, hy, hs, yaw, .5 + .5 * e, Math.sin(HC * 1.1) * .13 * (1 - u), 1 - sstep(.5, 1, u));
+    ictx.restore();
+    ctx.save(); ctx.globalAlpha = 1 - sstep(.55, 1, u); ctx.drawImage(IC, 0, 0, W, H); ctx.restore();
     return;
   }
   if (ac) {
@@ -4553,7 +4650,6 @@ requestAnimationFrame(loop);
   const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
   const standalone = () => matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let skipped = false;
-
   const lock = () => { try { const p = screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'); if (p && p.catch) p.catch(() => {}); } catch (e) {} };
   const update = () => {
     const ok = isFs() || standalone() || skipped;
@@ -4569,11 +4665,8 @@ requestAnimationFrame(loop);
   skip.addEventListener('click', () => { skipped = true; update(); });
   document.addEventListener('fullscreenchange', update);
   document.addEventListener('webkitfullscreenchange', update);
-  matchMedia('(display-mode: fullscreen)').addEventListener && matchMedia('(display-mode: fullscreen)').addEventListener('change', update);
   addEventListener('orientationchange', () => setTimeout(update, 200));
   update();
-
-  /* Manifest embutido: se o jogador instalar na tela inicial, abre em tela cheia e horizontal, sem URL */
   try {
     const m = { name: 'OUTCOME', short_name: 'OUTCOME', start_url: location.href.split('#')[0], scope: location.href.replace(/[^\/]*$/, ''), display: 'fullscreen', orientation: 'landscape', background_color: '#0d0a14', theme_color: '#0d0a14' };
     const l = document.createElement('link'); l.rel = 'manifest';
