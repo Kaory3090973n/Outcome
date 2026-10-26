@@ -423,6 +423,26 @@ function sfxSlide() {   // deslize: rajada de ar rasteira
   nz(sfxBus, t, .3, 'bandpass', 700, .2, .02, .2); tone(sfxBus, t, 'sine', 180, 70, .22, .25, .002, .15);
 }
 
+/* ---- SOM DE BOTÃO (menus) ---- */
+/* Clique seco de trava de arma: estalo metálico + "toc" grave abafado (feltro/madeira) + fio de ressonância. Cada clique varia um pouco o tom (não cansa).
+   kind 1 = botão principal (COMEÇAR, INICIAR...): mais pesado, com um segundo "clack" de ferrolho | kind 0 = botão comum */
+const UI_HOVER = true;   // false = sem o tiquezinho ao passar o mouse
+function sfxClick(kind) {
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002, v = 1 + (Math.random() - .5) * .07, p = kind ? 1 : 0;
+  nz(sfxBus, t, .05, 'highpass', 3200 * v, .26, .0005, .028);                          // estalo: metal contra metal
+  tone(sfxBus, t, 'square', 1500 * v, 700 * v, .03, .06, .0005, .022);                 // dente da trava
+  tone(sfxBus, t + .012, 'sine', (p ? 170 : 215) * v, 70, .1, p ? .55 : .42, .001, .09);   // toc grave abafado
+  tone(sfxBus, t + .03, 'triangle', 2300 * v, 0, .14, .03, .001, .11);                 // brilho metálico que se apaga
+  if (p) { const t2 = t + .07; nz(sfxBus, t2, .04, 'highpass', 2600, .2, .0005, .022); tone(sfxBus, t2, 'sine', 140 * v, 60, .09, .4, .001, .08); }   // ferrolho fechando
+}
+function sfxHover() {   // passar o mouse: tique bem baixinho
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
+  nz(sfxBus, t, .02, 'highpass', 5000, .05, .0005, .012); tone(sfxBus, t, 'sine', 1900, 1500, .02, .02, .0005, .014);
+}
+let HOVK = null, HOVF = false;
+function hoverTick(key) { HOVF = true; if (HOVK !== key) { HOVK = key; if (UI_HOVER) sfxHover(); } }
+function uiHit(b) { b.fn(); sfxClick(b.pri); }   // todo clique em botão/aba/item de menu passa por aqui (mouse e toque)
+
 /* música: cada faixa é um conjunto de padrões de 16 passos tocados em loop (bpm, escala, bateria, baixo e melodia) */
 const SC = { min: [0, 2, 3, 5, 7, 8, 10], phr: [0, 1, 3, 5, 7, 8, 10], hmin: [0, 2, 3, 5, 7, 8, 11], dor: [0, 2, 3, 5, 7, 9, 10], pdom: [0, 1, 4, 5, 7, 8, 10] };
 const dn = (sc, d) => sc[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7), N = null;
@@ -604,7 +624,7 @@ canvas.addEventListener('mousedown', e => {
   if (e.button !== 0) return;
   if (state === 'play' && TUT && tutHit(e.clientX, e.clientY)) return;
   if (state === 'play') { input.down = true; input.buffer = .15; }
-  else { bindCapture = null; nameFocus = false; for (const b of ui) if (input.mx > b.x && input.mx < b.x + b.w && input.my > b.y && input.my < b.y + b.h) { b.fn(); break; } }
+  else { bindCapture = null; nameFocus = false; for (const b of ui) if (input.mx > b.x && input.mx < b.x + b.w && input.my > b.y && input.my < b.y + b.h) { uiHit(b); break; } }
 });
 addEventListener('mouseup', e => { if (e.button === 0) input.down = false; if (e.button === 2) input.peek = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
@@ -629,7 +649,7 @@ function touchLayout() {
   btns.push({ k: 'II', x: W - 34 * s, y: 34 * s, r: 22 * s });
   return { s, btns, stick: 62 * s };
 }
-function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) { b.fn(); break; } }
+function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y > b.y && y < b.y + b.h) { uiHit(b); break; } }
 function onTouchStart(t) {
   if (state === 'intro') { introClick(); return; }
   input.mx = t.clientX; input.my = t.clientY;
@@ -2459,10 +2479,11 @@ function button(label, x, y, w, h, fn, style, tip) {   // style === 'primary' ->
   const k = ctx.getTransform().a / (RES);   // botões funcionam também com o menu encolhido
   const hov = input.mx > x * k && input.mx < (x + w) * k && input.my > y * k && input.my < (y + h) * k, pri = style === 'primary';
   ctx.shadowBlur = 0;
+  if (hov && !TOUCH && state !== 'intro') hoverTick(label);
   if (hov) { const tp = tip || BTN_TIPS[label]; if (tp) TIPNOW = tp; }
   btnShape(x, y, w, h, hov, pri);
   txt(label, x + w / 2, y + h / 2 + 1, Math.min(h * .4, 20), pri ? '#0d0d11' : '#e7e4d3', 'center');
-  ui.push({ x: x * k, y: y * k, w: w * k, h: h * k, fn });
+  ui.push({ x: x * k, y: y * k, w: w * k, h: h * k, fn, pri });
 }
 /* VOLTAR no canto inferior esquerdo (side = -1) e CONTINUAR no canto inferior direito (side = 1), em todas as telas */
 function cornerBtn(label, side, W, H, fn, style) {
@@ -3462,7 +3483,7 @@ function drawOptions(t) {
     button('<', x2 + CW - 200, y2, 40, kh, dec); txt(val, x2 + CW - 100, y2 + kh / 2 + 1, 12, INK, 'center'); button('>', x2 + CW - 40, y2, 40, kh, inc);
     y2 += rowH;
   };
-  const sfxTick = () => { audioChanged(); sfxBeep(740, .09); };
+  const sfxTick = () => { audioChanged(); };   // o clique do botão já dá o retorno sonoro (no volume novo)
   arow('VOLUME DA MÚSICA', cfg.musicVol * 10 + '%', () => { cfg.musicVol = clamp(cfg.musicVol - 1, 0, 10); audioChanged(); }, () => { cfg.musicVol = clamp(cfg.musicVol + 1, 0, 10); audioChanged(); });
   arow('VOLUME DOS EFEITOS', cfg.sfxVol * 10 + '%', () => { cfg.sfxVol = clamp(cfg.sfxVol - 1, 0, 10); sfxTick(); }, () => { cfg.sfxVol = clamp(cfg.sfxVol + 1, 0, 10); sfxTick(); });
   arow('MÚSICA DA PARTIDA', cfg.music ? cfg.music + ' · ' + TRACKS[cfg.music - 1].name : 'ALEATÓRIA', () => { cfg.music = (cfg.music + 5) % 6; audioChanged(); }, () => { cfg.music = (cfg.music + 1) % 6; audioChanged(); });
@@ -4930,7 +4951,7 @@ function drawPick(t) {
       txt(mp ? mp.name : 'ALEATÓRIO', x + T / 2, y + TH - 8, clamp(T / 9, 7, 10), mine || win ? INK : 'rgba(231,228,211,.85)', 'center'); ctx.restore();
       ctx.beginPath(); ctx.roundRect(x + .5, y + .5, T - 1, TH - 1, 10); ctx.strokeStyle = win ? (mp ? mp.accent : INK) : mine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = win || mine ? 3 : hov ? 2 : 1; ctx.stroke();
       voters(v, x + 10, y + 10); ctx.globalAlpha = 1;
-      if (canMe) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { sfxBeep(520, .06); mapClick(v); } });
+      if (canMe) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { mapClick(v); } });
       return;
     }
     const owner = takenBy(c), isMine = canMe && s.marks[me] === c, canPick = canMe && owner === undefined, hov = canPick && over(x, y, T, TH), rc = !!s.roll && c >= 0 && s.roll.cur === c;
@@ -4946,7 +4967,7 @@ function drawPick(t) {
     ctx.strokeStyle = rc ? pcol(s.roll.who) : owner !== undefined ? pcol(owner) : isMine ? INK : hov ? 'rgba(231,228,211,.75)' : 'rgba(255,255,255,.18)'; ctx.lineWidth = rc || isMine || owner !== undefined ? 3 : hov ? 2 : 1; ctx.stroke();
     if (owner !== undefined) txt(owner === me ? 'VOCÊ' : owner === 'host' ? 'ANF.' : pname(owner).replace('JOGADOR ', 'J'), x + T / 2, y + (TH - 16) / 2, clamp(T / 7, 9, 13), pcol(owner), 'center');
     let dj = 0; if (s.ph === 'char') for (const id of s.ids) if (id !== me && s.conf[id] === undefined && s.marks[id] === c) { ctx.beginPath(); ctx.arc(x + T - 10 - dj * 11, y + 10, 4.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); dj++; }
-    if (canPick) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { sfxBeep(isMine ? 880 : 620, .06); charClick(c); } });
+    if (canPick) ui.push({ x: x * k, y: y * k, w: T * k, h: TH * k, fn: () => { charClick(c); } });
   });
   cornerBtn('SAIR', -1, IW, IH, () => setState('menu'));
   ctx.restore();
@@ -5157,7 +5178,7 @@ function drawJoin(t) {
 /* ---------------------------- GAME LOOP ------------------------------- */
 let last = performance.now();
 function loop(now) {
-  perfTick(now - last); let dt = Math.min((now - last) / 1000, .05); last = now; ui = []; const rdt = dt;
+  perfTick(now - last); let dt = Math.min((now - last) / 1000, .05); last = now; ui = []; if (!HOVF) HOVK = null; HOVF = false; const rdt = dt;
   updateMusic();
   if (state === 'intro') { if (!introGate) introT += dt; drawIntro(introT); }
   else if (state === 'train') { menuT += dt; drawTrain(menuT); }
