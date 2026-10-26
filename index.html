@@ -2185,32 +2185,6 @@ function lobbyBg(IW, IH, ms, baseA, ent, style) {
       ctx.restore();
     });
     ctx.restore(); ctx.globalAlpha = baseA;
-  } else if (style === 'side') {   // luz entrando de lado, por uma janela alta: uma faixa larga e inclinada que respira devagar
-    const sw = Math.sin(sec * .3) * IH * .07, br = (.85 + .15 * Math.sin(sec * .8));
-    ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * br;
-    [[1, .17], [.55, .1]].forEach(([k, al], i) => {
-      const gx = ctx.createLinearGradient(0, 0, IW * .95, 0); gx.addColorStop(0, 'rgba(231,228,211,' + al + ')'); gx.addColorStop(1, 'rgba(231,228,211,0)');
-      const o2 = i * IH * .11; ctx.fillStyle = gx; ctx.beginPath(); ctx.moveTo(0, IH * .1 + sw + o2); ctx.lineTo(IW * .95, IH * (.5 + .1 * k) + sw * 1.4); ctx.lineTo(IW * .95, IH * (.92 - .1 * (1 - k)) + sw * 1.4); ctx.lineTo(0, IH * .42 + sw + o2); ctx.closePath(); ctx.fill();
-    });
-    ctx.restore(); ctx.globalAlpha = baseA;
-  } else if (style === 'sweep') {   // dois holofotes nos cantos de baixo varrendo a tela devagar, cruzando os feixes
-    ctx.save(); ctx.scale(ms, ms); const L = Math.hypot(IW, IH) * 1.1;
-    [[0, 1, 0], [IW, -1, 2.4]].forEach(([ox, dir, ph]) => {
-      ctx.save(); ctx.translate(ox, IH + 10); ctx.rotate(dir * (.42 + .3 * Math.sin(sec * .35 + ph))); ctx.globalAlpha = baseA * ent(0) * (.85 + .15 * Math.sin(sec * 1.1 + ph));
-      const gs = ctx.createLinearGradient(0, 0, 0, -L); gs.addColorStop(0, 'rgba(231,228,211,.22)'); gs.addColorStop(.7, 'rgba(231,228,211,.05)'); gs.addColorStop(1, 'rgba(231,228,211,0)');
-      ctx.fillStyle = gs; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.lineTo(L * .13, -L); ctx.lineTo(-L * .13, -L); ctx.closePath(); ctx.fill(); ctx.restore();
-    });
-    ctx.restore(); ctx.globalAlpha = baseA;
-  } else if (style === 'pass') {   // farol de carro passando na rua: a cada poucos segundos uma faixa larga de luz inclinada atravessa a tela e some, com um brilho fraco fixo no alto
-    const per = 8, ph = (sec % per) / per, e = Math.sin(Math.PI * ph), x = -IW * .35 + ph * IW * 1.7;
-    ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * .5;
-    const gl = ctx.createRadialGradient(IW / 2, -IH * .15, 0, IW / 2, -IH * .15, IH * .9); gl.addColorStop(0, 'rgba(231,228,211,.09)'); gl.addColorStop(1, 'rgba(231,228,211,0)'); ctx.fillStyle = gl; ctx.fillRect(0, 0, IW, IH);
-    [[0, IW * .26, .085], [IW * .2, IW * .12, .045]].forEach(([dx, hw, al]) => {
-      ctx.save(); ctx.globalAlpha = baseA * ent(0) * e * e; ctx.translate(x + dx + IH * .22, 0); ctx.transform(1, 0, -.45, 1, 0, 0);
-      const gx = ctx.createLinearGradient(-hw, 0, hw, 0); gx.addColorStop(0, 'rgba(231,228,211,0)'); gx.addColorStop(.5, 'rgba(231,228,211,' + al + ')'); gx.addColorStop(1, 'rgba(231,228,211,0)');
-      ctx.fillStyle = gx; ctx.fillRect(-hw, 0, hw * 2, IH); ctx.restore();
-    });
-    ctx.restore(); ctx.globalAlpha = baseA;
   } else if (style === 'none') {   // sem luz de ambiente (a tela tem a sua própria luz)
   } else {   // luz: um feixe que balança devagar de um lado para o outro, passando por cima do título
     const MB = menuBeam(IW, IH), ang = Math.sin(sec * .4) * .3, ax = IW / 2 + Math.sin(sec * .23 + 1) * IW * .1;
@@ -2630,7 +2604,7 @@ function drawModes(t) {
   card('CAMPO DE BATALHA', 'TODOS CONTRA TODOS', xr, y - ext, WR, hb, () => { soloSetup = false; bgSetup = true; cfg.team = 0; saveCfg(); setState('setup'); }, TIPS.bg, 'bg');
   step(FLIP.t, over(xr, ty0, WR, th0));
   if (!FLIP.t.m) card('TUTORIAL', 'APRENDA A JOGAR', xr, ty0, WR, th0, startTutorial, TIPS.tut, 'tut');
-  else { frame(xr, ty0, WR, th0, true); drawTargetIcon(xr + WR - 46, ty0 + 46, INK); ls(2); txt('TREINO', xr + 20, ty0 + th0 - 28, clamp(WR / 20, 14, 22), INK, 'left'); ls(0); tip = TIPS.tr; ui.push({ x: xr * k, y: ty0 * k, w: WR * k, h: th0 * k, fn: () => setState('train') }); }
+  else { frame(xr, ty0, WR, th0, true); drawTargetIcon(xr + WR - 46, ty0 + 46, INK); ls(2); txt('TREINO', xr + 20, ty0 + th0 - 46, clamp(WR / 20, 14, 22), INK, 'left'); ls(0); txt('SOZINHO OU CONTRA BOTS', xr + 20, ty0 + th0 - 22, clamp(WR / 34, 9, 12), MUTE, 'left'); tip = TIPS.tr; ui.push({ x: xr * k, y: ty0 * k, w: WR * k, h: th0 * k, fn: () => setState('train') }); }
   // abas embaixo dos cartões
   const by = y + gh + g, byr = y + gh + ext + g, gt = 8, bw = (wa - gt) / 2, bw2 = (WR - g) / 2;   // abas da esquerda: só sob a pílula, menores e mais juntas
   tab('PERSONALIZADA', x0, by, bw, !FLIP.c.m, FLIP.c.m ? 0 : FLIP.c.p, go(0), TIPS.c);
@@ -2657,7 +2631,7 @@ function drawMapPreview(mp, x, y, w, h) {   // miniatura desenhada a partir do l
 }
 function drawMaps(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  const ent = scrEnter('maps'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'side');
+  const ent = scrEnter('maps'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'blinds');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), n = MAPS.length + 1, gap = 14, cw = Math.min(210, (IW - 40 - gap * (n - 1)) / n), ch = cw * 1.2;
   const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + 22 + 64 + 16 + 52 + 12 + 44)) / 2);
@@ -3418,10 +3392,11 @@ const UPDATES = [
     criado: [
       'Chapéu de feltro escuro, com borda branca, encostado em cima do primeiro O do título OUTCOME no menu. A fonte continua a mesma, sem sombra.',
       'Feixe de luz nas telas ARMAS e PERSONAGENS: a luz cai do alto sobre a peça escolhida, forma uma poça de luz no chão, tem poeira flutuando e acompanha a arma ou o personagem até o lugar final.',
-      'Três novos efeitos de luz de fundo, no mesmo clima do menu: persiana, lâmpadas penduradas e luz lateral. Cada tela usa a sua.',
+      'Três novos efeitos de luz de fundo, no mesmo clima do menu: persiana, lâmpadas penduradas e farol de carro passando. Cada tela usa a sua.',
     ],
     modificado: [
       'O botão JOGAR do menu ficou com a mira e o cartão CAMPO DE BATALHA ficou com a bala.',
+      'No ESCOLHER MODO o cartão TREINO ganhou o mesmo texto pequeno embaixo que o TUTORIAL e o CAMPO DE BATALHA têm.',
       'O ESCOLHER MODO deixou de repetir a luz do menu e passou a ter um brilho fraco no alto e faróis de carro passando, com uma faixa de luz que atravessa a tela de tempos em tempos.',
       'Configuração da partida, treinamento, mapa, votação, sala e entrar na sala ganharam o fundo do menu. Configuração, treinamento e mapa também ganharam a linha fina sob o título e a entrada animada.',
       'Em ARMAS e PERSONAGENS a peça sai do retângulo mais cedo, e o destaque do retângulo, o nome e as barras ficaram na cor neutra do jogo, sem a cor de cada arma ou personagem.',
@@ -4200,7 +4175,7 @@ function wrapLines(text, maxW, size) {
 function drawLog(t) {
   const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2;
   const ent = scrEnter('log');
-  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'side');   // mesmo fundo do menu
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'pass');   // mesmo fundo do menu
   ctx.save(); ctx.scale(ms, ms);
   const colW = Math.min(760, W - 32), x0 = cx - colW / 2, top = 84, bot = H - 84, pad = 20, LH = 19, FS = 13, inner = colW - pad * 2 - 16;
   const SECT = [['criado', 'CRIADO', '#8fd6a4'], ['modificado', 'MODIFICADO', '#e7c27a'], ['removido', 'REMOVIDO', '#e08a8a']];
@@ -4428,7 +4403,7 @@ const mapClick = v => { if (NET.host) selVote('host', v); else netSend(NET.conns
 const charClick = c => { if (NET.host) selPick('host', c); else netSend(NET.conns.host, { t: 'pick', c }); };
 function drawPick(t) {
   const s = NET.sel, ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  const ent = scrEnter('pick'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'side');
+  const ent = scrEnter('pick'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'lamps');
   if (!s) return;
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), me = NET.me || 'host', mapPh = s.ph === 'map' || s.ph === 'mapres', timed = s.ph === 'map' || s.ph === 'char';
