@@ -1,32 +1,68 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0d0a14">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="screen-orientation" content="landscape">
-<meta name="x5-orientation" content="landscape">
-<meta name="x5-fullscreen" content="true">
-<title>OUTCOME</title>
-<link rel="stylesheet" href="style.css">
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Doom</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<canvas id="game"></canvas>
-<div id="fsGate">
-  <div class="rot">📱</div>
-  <h1>OUTCOME</h1>
-  <p id="fsMsg">Gire o celular para a horizontal e toque no botão para jogar em tela cheia.</p>
-  <button id="fsBtn">TELA CHEIA</button>
-  <p id="fsIos">No iPhone o Safari não tem tela cheia por botão. Toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>; abrindo por esse ícone o jogo roda sem a barra de endereço.</p>
-  <button id="fsSkip" class="alt" style="display:none">Jogar mesmo assim</button>
-</div>
+  <div id="jogo" class="em-menu">
+    <canvas id="tela"></canvas>
 
-<script src="game.js"></script>
-<script src="fs.js"></script>
-<script src="icon.js"></script>
+    <div id="hud">
+      <div class="item"><span class="rotulo">VIDA</span><span id="hudVida">100</span></div>
+      <div class="item"><span class="rotulo">MUNIÇÃO</span><span id="hudMunicao">30</span></div>
+      <div class="item"><span class="rotulo">DEMÔNIOS</span><span id="hudInimigos">0</span></div>
+    </div>
+
+    <div id="danoFlash"></div>
+
+    <!-- Tela inicial -->
+    <div id="menu">
+      <div id="menuPrincipal" class="tela-menu">
+        <h1 class="menu-titulo">MINI DOOM</h1>
+        <span class="menu-linha"></span>
+        <span id="menuVersao" class="menu-versao"></span>
+        <nav class="menu-botoes">
+          <button id="btnJogar" class="btn-menu">JOGAR</button>
+          <button id="btnAtualizacao" class="btn-menu">ATUALIZAÇÕES</button>
+          <button id="btnSair" class="btn-menu">SAIR</button>
+        </nav>
+        <p class="menu-dica">↑ ↓ navegar · enter escolher</p>
+      </div>
+
+      <div id="menuUpdates" class="tela-menu oculto">
+        <h2 class="menu-subtitulo">ATUALIZAÇÕES</h2>
+        <div id="listaUpdates" class="lista-updates"></div>
+        <button id="btnVoltar" class="btn-menu">VOLTAR</button>
+      </div>
+
+      <div id="menuSaida" class="tela-menu oculto">
+        <h2 class="menu-subtitulo">ATÉ LOGO</h2>
+        <span class="menu-linha"></span>
+        <p class="menu-aviso">O navegador não permite que o jogo feche a aba sozinho.<br>Feche com Ctrl + W (ou ⌘ + W).</p>
+        <button id="btnVoltarSaida" class="btn-menu">VOLTAR</button>
+      </div>
+    </div>
+
+    <!-- Pausa / vitória / derrota -->
+    <div id="overlay" class="oculto">
+      <h1 id="titulo">MINI DOOM</h1>
+      <p id="mensagem">Elimine todos os demônios do labirinto.</p>
+      <ul id="controles">
+        <li><b>W A S D</b> mover</li>
+        <li><b>Mouse</b> mira livre (cima, baixo e lados)</li>
+        <li><b>← →</b> girar &nbsp; <b>↑ ↓</b> olhar para cima/baixo</li>
+        <li><b>Clique</b> ou <b>Espaço</b> atirar</li>
+        <li><b>P</b> pausar</li>
+      </ul>
+      <button id="btnIniciar">JOGAR</button>
+      <button id="btnMenu" class="btn-menu">MENU</button>
+    </div>
+  </div>
+
+  <script src="atualizacoes.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
