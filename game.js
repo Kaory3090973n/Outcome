@@ -611,6 +611,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Escape') { if (state === 'play') setState('pause'); else if (state === 'pause') setState('play'); else if (state === 'options') setState(optBack); else if (state !== 'menu') setState('menu'); }   // Esc: pausa / continua / volta
   if (e.code === 'Enter') { if (state === 'menu') setState('modes'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup') startSetup(); else if (state === 'mend') startMatch(); else if (state === 'dead') startGame(training); else if (state === 'tutend') setState('modes'); }
   if (state === 'log') { if (e.code === 'ArrowDown' || e.code === 'PageDown') logScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') logScroll -= 70; }
+  if (state === 'options') { if (e.code === 'ArrowDown' || e.code === 'PageDown') optScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') optScroll -= 70; }
   if (state === 'info' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) INFO.idx += e.code === 'ArrowRight' ? 1 : -1;
   if (state === 'maps' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { const n = MAPS.length + 1; cfg.map = (cfg.map + (e.code === 'ArrowRight' ? 1 : n - 1)) % n; saveCfg(); }
   if (state === 'chars' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) CHP.idx += e.code === 'ArrowRight' ? 1 : -1;
@@ -631,6 +632,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 let wheelAcc = 0;
 canvas.addEventListener('wheel', e => {
   if (state === 'log') { logScroll += e.deltaY; e.preventDefault(); }
+  else if (state === 'options') { optScroll += e.deltaY; e.preventDefault(); }
   else if (state === 'info' || state === 'chars') {   // rolar o mouse nas telas ARMAS e PERSONAGENS troca o item (clicar nas abas e as setas também funcionam)
     e.preventDefault(); wheelAcc += e.deltaY;
     if (Math.abs(wheelAcc) >= 40) {
@@ -670,6 +672,7 @@ function onTouchStart(t) {
 }
 function onTouchMove(t) {
   if (state === 'log' && t.identifier === touch.drag) { logScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
+  if (state === 'options' && t.identifier === touch.drag) { optScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
   if (t.identifier === touch.move.id) {
     const m = touch.move, R = touchLayout().stick; let dx = t.clientX - m.ox, dy = t.clientY - m.oy; const d = Math.hypot(dx, dy);
     if (d > R) { m.ox += dx / d * (d - R); m.oy += dy / d * (d - R); dx = t.clientX - m.ox; dy = t.clientY - m.oy; }   // base segue o dedo
@@ -2643,7 +2646,7 @@ function drawMenu(t) {
   B(1, o => button('ARMAS', x1, y + o, RW, RH, () => { resetPicker(INFO); setState('info'); }));
   B(2, o => button('PERSONAGENS', x2, y + o, RW, RH, () => { resetPicker(CHP); setState('chars'); }));
   B(3, o => button('ATUALIZAÇÃO', x1, y + RH + GP + o, RW, RH, () => { logScroll = 0; setState('log'); }));
-  B(4, o => button('OPÇÕES', x2, y + RH + GP + o, RW, RH, () => { optBack = 'menu'; setState('options'); }));
+  B(4, o => button('OPÇÕES', x2, y + RH + GP + o, RW, RH, () => { optBack = 'menu'; optScroll = 0; setState('options'); }));
   ctx.globalAlpha = baseA * ent(.8); txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right'); ctx.globalAlpha = baseA;   // contador de versão (só no lobby)
   ctx.restore();
 }
@@ -3445,52 +3448,74 @@ function drawPause() {
   ctx.save(); ctx.scale(ms, ms);
   const y0 = IH / 2 - 96;   // só três botões, sem nenhum texto
   button('CONTINUAR', cx - 130, y0, 260, 52, () => setState('play'), 'primary');
-  button('OPÇÕES', cx - 130, y0 + 66, 260, 48, () => { optBack = 'pause'; setState('options'); });
+  button('OPÇÕES', cx - 130, y0 + 66, 260, 48, () => { optBack = 'pause'; optScroll = 0; setState('options'); });
   button('SAIR', cx - 130, y0 + 126, 260, 48, () => setState('menu'));
   ctx.restore();
 }
+let optScroll = 0;   // rolagem da tela OPÇÕES (igual à da ATUALIZAÇÃO)
 function drawOptions(t) {
-  const wide0 = innerWidth / uiScale() > 860, need = wide0 ? 704 : 944, ms = clamp(Math.min(uiScale(), innerHeight / need), .45, 1);
-  const W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, wide = W > 860, MUTE = '#8a8a96', INK = '#e7e4d3';
+  const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
   const ent = scrEnter('options');
   ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'lamps');   // mesmo fundo do menu
   ctx.save(); ctx.scale(ms, ms);
-  const OY = wide ? Math.max(0, Math.round((H - 672) / 2 - 20)) : 0;   // centraliza o conteúdo na altura da tela (PC)
-  scrHead('OPÇÕES', cx, 30 + OY, clamp(Math.min(W / 14, H / 14), 20, 30), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
-  txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar  ·  se repetir, as duas ações trocam de lugar', cx, 76 + OY, 12, bindCapture ? '#ffd23f' : '#5c5c68', 'center');
+  const colW = Math.min(620, W - 32), x0 = cx - colW / 2, top = 84, bot = H - 84, pad = 20, rowH = 44, kh = 36, KW = clamp(colW * .3, 100, 150), cx2 = x0 + colW - pad - KW;
+  const SECT = { key: '#8fd6a4', fix: '#e7c27a', aud: '#8ab4e0' };
+  // 1) monta a lista: um cartão por seção, linhas dentro dele (y relativo ao início da lista)
+  const ops = [], cards = []; let y = 0;
   const fixed = [['ATIRAR / SOCAR', 'CLIQUE ESQ.'], ['ARREMESSAR / ESPIAR', 'CLIQUE DIR.'], ['MIRAR', 'MOUSE'], ['PAUSAR / VOLTAR', 'ESC']];
-  const CW = 390, rowH = wide ? 46 : 33, KW = 140, kh = rowH - 6;
-  const x1 = wide ? cx - CW - 20 : cx - CW / 2, x2 = wide ? cx + 20 : x1;
-  let y1 = 108 + OY;
-  txt('TECLADO', x1, y1, 12, MUTE, 'left'); y1 += 18;
-  KEYDEFS.forEach(([id, label]) => {
-    txt(label, x1, y1 + kh / 2, 13, INK, 'left');
-    const on = bindCapture === id;
-    button(on ? 'PRESSIONE...' : keyName(KEYS[id]), x1 + CW - KW, y1, KW, kh, () => { bindCapture = id; }, on ? 'primary' : undefined);
-    y1 += rowH;
-  });
-  let y2 = wide ? 108 + OY : y1 + 10;
-  txt('MOUSE E SISTEMA (FIXOS)', x2, y2, 12, MUTE, 'left'); y2 += 18;
-  fixed.forEach(([label, val]) => {
-    txt(label, x2, y2 + kh / 2, 13, 'rgba(231,228,211,.6)', 'left');
-    ctx.beginPath(); ctx.roundRect(x2 + CW - KW + .5, y2 + .5, KW - 1, kh - 1, Math.min(12, kh * .28)); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.stroke();
-    txt(val, x2 + CW - KW / 2, y2 + kh / 2 + 1, Math.min(kh * .4, 20), 'rgba(231,228,211,.5)', 'center');
-    y2 += rowH;
-  });
-  y2 += 6; txt('ÁUDIO', x2, y2, 12, MUTE, 'left'); y2 += 18;
-  const arow = (label, val, dec, inc) => {
-    txt(label, x2, y2 + kh / 2, 13, INK, 'left');
-    button('<', x2 + CW - 200, y2, 40, kh, dec); txt(val, x2 + CW - 100, y2 + kh / 2 + 1, 12, INK, 'center'); button('>', x2 + CW - 40, y2, 40, kh, inc);
-    y2 += rowH;
-  };
   const sfxTick = () => { audioChanged(); };   // o clique do botão já dá o retorno sonoro (no volume novo)
-  arow('VOLUME DA MÚSICA', cfg.musicVol * 10 + '%', () => { cfg.musicVol = clamp(cfg.musicVol - 1, 0, 10); audioChanged(); }, () => { cfg.musicVol = clamp(cfg.musicVol + 1, 0, 10); audioChanged(); });
-  arow('VOLUME DOS EFEITOS', cfg.sfxVol * 10 + '%', () => { cfg.sfxVol = clamp(cfg.sfxVol - 1, 0, 10); sfxTick(); }, () => { cfg.sfxVol = clamp(cfg.sfxVol + 1, 0, 10); sfxTick(); });
-  arow('MÚSICA DA PARTIDA', cfg.music ? cfg.music + ' · ' + TRACKS[cfg.music - 1].name : 'ALEATÓRIA', () => { cfg.music = (cfg.music + 5) % 6; audioChanged(); }, () => { cfg.music = (cfg.music + 1) % 6; audioChanged(); });
-  if (!wide) y1 = y2;
-  txt('As setas do teclado também movem o personagem.', x2, (wide ? y2 : y1) + 8, 11, '#5c5c68', 'left');
-  const by = Math.max(wide ? 108 + OY + 18 + KEYDEFS.length * rowH + 14 : y1 + 30, 0) , bb = Math.min(by, H - 62);
-  button('RESTAURAR PADRÃO', cx - 115, bb, 230, 46, () => { KEYDEFS.forEach(([id,, d]) => KEYS[id] = d); try { localStorage.setItem('oc_keys', JSON.stringify(KEYS)); } catch (e) {} bindCapture = null; });
+  const card = (title, col, sub, rows) => {
+    const y1 = y; y += pad;
+    ops.push({ k: 'label', y, label: title, col }); y += 26;
+    if (sub) { ops.push({ k: 'sub', y, sub }); y += 22; }
+    for (const r of rows) { ops.push(Object.assign({ y }, r)); y += r.h || rowH; }
+    y += pad - 6; cards.push({ y: y1, h: y - y1 }); y += 16;
+  };
+  card('TECLADO', SECT.key, null, [
+    { k: 'hint', h: 24 },
+    ...KEYDEFS.map(([id, label]) => ({ k: 'key', id, label })),
+    { k: 'reset', h: 54 },
+  ]);
+  card('MOUSE E SISTEMA (FIXOS)', SECT.fix, null, fixed.map(([label, val]) => ({ k: 'fix', label, val })));
+  card('ÁUDIO', SECT.aud, null, [
+    { k: 'aud', label: 'VOLUME DA MÚSICA', val: () => cfg.musicVol * 10 + '%', dec: () => { cfg.musicVol = clamp(cfg.musicVol - 1, 0, 10); audioChanged(); }, inc: () => { cfg.musicVol = clamp(cfg.musicVol + 1, 0, 10); audioChanged(); } },
+    { k: 'aud', label: 'VOLUME DOS EFEITOS', val: () => cfg.sfxVol * 10 + '%', dec: () => { cfg.sfxVol = clamp(cfg.sfxVol - 1, 0, 10); sfxTick(); }, inc: () => { cfg.sfxVol = clamp(cfg.sfxVol + 1, 0, 10); sfxTick(); } },
+    { k: 'aud', label: 'MÚSICA DA PARTIDA', val: () => cfg.music ? cfg.music + ' · ' + TRACKS[cfg.music - 1].name : 'ALEATÓRIA', dec: () => { cfg.music = (cfg.music + 5) % 6; audioChanged(); }, inc: () => { cfg.music = (cfg.music + 1) % 6; audioChanged(); } },
+  ]);
+  ops.push({ k: 'note', y: y - 4 }); y += 28;
+  const maxS = Math.max(0, y - (bot - top)); optScroll = clamp(optScroll, 0, maxS);
+  scrHead('OPÇÕES', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
+  // 2) desenha dentro da área rolável; os botões só recebem toque na parte que aparece
+  const kk = ctx.getTransform().a / RES, oy = top - optScroll;
+  const sbtn = (label, x, yy, w, h, fn, style) => {   // botão rolável: recorta a área de toque para a janela visível
+    const n = ui.length; button(label, x, yy, w, h, fn, style);
+    const u = ui[n]; if (!u) return; const t0 = Math.max(u.y, top * kk), t1 = Math.min(u.y + u.h, bot * kk);
+    if (t1 <= t0) ui.splice(n, 1); else { u.y = t0; u.h = t1 - t0; }
+  };
+  ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, bot - top); ctx.clip();
+  for (const c of cards) { ctx.beginPath(); ctx.roundRect(x0 + .5, c.y + oy + .5, colW - 1, c.h - 1, 18); const gr = ctx.createLinearGradient(0, c.y + oy, 0, c.y + oy + c.h); gr.addColorStop(0, 'rgba(255,255,255,.05)'); gr.addColorStop(1, 'rgba(255,255,255,.012)'); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke(); }   // mesmo fundo dos cartões da ATUALIZAÇÃO
+  for (const o of ops) {
+    const yy = o.y + oy, mid = yy + kh / 2;
+    if (yy > bot + 4 || yy + rowH < top - 4) continue;   // fora da janela
+    if (o.k === 'label') { ctx.beginPath(); ctx.roundRect(x0 + pad, yy + 5, 8, 8, 4); ctx.fillStyle = o.col; ctx.fill(); txt(o.label, x0 + pad + 16, yy + 10, 12, o.col, 'left'); }
+    else if (o.k === 'hint') txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar. Se repetir, as duas ações trocam de lugar.', x0 + pad, yy + 8, 11, bindCapture ? '#ffd23f' : '#5c5c68', 'left');
+    else if (o.k === 'key') {
+      txt(o.label, x0 + pad, mid, 13, INK, 'left');
+      const on = bindCapture === o.id;
+      sbtn(on ? 'PRESSIONE...' : keyName(KEYS[o.id]), cx2, yy, KW, kh, () => { bindCapture = o.id; }, on ? 'primary' : undefined);
+    } else if (o.k === 'reset') sbtn('RESTAURAR PADRÃO', cx - 115, yy + 6, 230, 40, () => { KEYDEFS.forEach(([id,, d]) => KEYS[id] = d); try { localStorage.setItem('oc_keys', JSON.stringify(KEYS)); } catch (e) {} bindCapture = null; });
+    else if (o.k === 'fix') {
+      txt(o.label, x0 + pad, mid, 13, 'rgba(231,228,211,.6)', 'left');
+      ctx.beginPath(); ctx.roundRect(cx2 + .5, yy + .5, KW - 1, kh - 1, Math.min(12, kh * .28)); ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.stroke();
+      txt(o.val, cx2 + KW / 2, mid + 1, 13, 'rgba(231,228,211,.5)', 'center');
+    } else if (o.k === 'aud') {
+      const AW = clamp(colW * .5, 190, 270), ax = x0 + colW - pad - AW;
+      txt(o.label, x0 + pad, mid, 13, INK, 'left');
+      sbtn('<', ax, yy, 40, kh, o.dec); txt(o.val(), ax + AW / 2, mid + 1, 12, INK, 'center'); sbtn('>', ax + AW - 40, yy, 40, kh, o.inc);
+    } else if (o.k === 'note') txt('As setas do teclado também movem o personagem.', cx, yy + 8, 11, '#5c5c68', 'center');
+  }
+  ctx.restore();
+  if (maxS > 0) { const th = Math.max(30, (bot - top) * (bot - top) / y), ty = top + (bot - top - th) * (optScroll / maxS); ctx.beginPath(); ctx.roundRect(x0 + colW + 8, ty, 4, th, 2); ctx.fillStyle = 'rgba(255,255,255,.25)'; ctx.fill(); }
   cornerBtn('VOLTAR', -1, W, H, () => setState(optBack));
   ctx.restore();
 }
@@ -3782,6 +3807,12 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 103, v: '0.53.1', title: 'Tela OPÇÕES organizada como a ATUALIZAÇÃO',
+    modificado: [
+      'A tela OPÇÕES agora segue o mesmo jeito da ATUALIZAÇÃO: uma coluna central rolável para baixo, com um cartão para cada assunto (TECLADO, MOUSE E SISTEMA e ÁUDIO), cada um com a bolinha colorida e o título no topo, e o mesmo fundo dos outros cartões.',
+      'Rola com a roda do mouse, com as setas do teclado (cima/baixo, PageUp/PageDown) ou arrastando o dedo, e uma barra fina na lateral mostra onde você está.',
+      'O botão RESTAURAR PADRÃO foi para o fim do cartão TECLADO, junto das teclas. Os botões só respondem ao toque na parte que aparece na janela, sem clicar por trás do título.',
+    ] },
   { n: 102, v: '0.53.0', title: 'Level design dos três mapas: BECO, ESTALEIRO e COBERTURA',
     criado: [
       'Cover de dupla altura. Cover ALTO (contêineres, paredes, dutos, estruturas): bloqueia tiros e a linha de visão por completo. Cover BAIXO (muretas, balcões, sofás, caixotes e lixeiras): bloqueia tiros de longe, mas colado nele ou em cobertura você atira por cima.',
