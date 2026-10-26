@@ -2691,10 +2691,15 @@ function drawMatchHUD() {
     txt(`RODADA ${M.round}`, W / 2, H / 2 - clamp(Math.min(W, H) * .3, 80, 190), 22, MUTE, 'center');
     ctx.globalAlpha = 1 - Math.pow(f, 3) * .85; txt(String(Math.max(1, n)), W / 2, H / 2, sz, '#fff', 'center'); ctx.globalAlpha = 1;
   }
-  if (M.phase === 'fight' && M.flashT > 0) {   // a tela pisca indicando que começou
-    const k = M.flashT, on = Math.floor((1 - k) * 8) % 2 === 0;
-    ctx.fillStyle = on ? `rgba(255,255,255,${.12 + .45 * k})` : `rgba(0,0,0,${.4 * k})`; ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = clamp(k * 2, 0, 1); txt('COMEÇOU!', W / 2, H / 2, clamp(W / 9, 36, 110) * (1 + (1 - k) * .25), '#fff', 'center'); ctx.globalAlpha = 1;
+  if (M.phase === 'fight' && M.flashT > 0) {   // começou: aviso suave (aparece e some devagar), sem piscar a tela
+    const k = M.flashT, e = easeInOut(clamp((1 - k) / .22, 0, 1)) * easeInOut(clamp(k / .45, 0, 1)), fs = clamp(W / 9, 36, 110), bh = fs * 1.7;
+    const bg = ctx.createLinearGradient(0, H / 2 - bh / 2, 0, H / 2 + bh / 2); bg.addColorStop(0, 'rgba(0,0,0,0)'); bg.addColorStop(.5, `rgba(0,0,0,${.38 * e})`); bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg; ctx.fillRect(0, H / 2 - bh / 2, W, bh);
+    ctx.globalAlpha = e; try { ctx.letterSpacing = (fs * .12) + 'px'; } catch (er) {}
+    txt('COMEÇOU!', W / 2 + fs * .06, H / 2 - fs * .08, fs * (.94 + .06 * e), INK, 'center');
+    try { ctx.letterSpacing = '0px'; } catch (er) {}
+    const lw = Math.min(W * .5, fs * 6) * e; ctx.fillStyle = 'rgba(231,228,211,.55)'; ctx.fillRect(W / 2 - lw / 2, H / 2 + fs * .5, lw, 2);
+    ctx.globalAlpha = 1;
   }
   if (M.phase === 'rend' && M.last) {
     ctx.fillStyle = `rgba(0,0,0,${.5 * clamp(M.phaseT * 3, 0, 1)})`; ctx.fillRect(0, 0, W, H);
@@ -3388,6 +3393,15 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 100, v: '0.52.2', title: 'Ícone do chapéu, largada suave e características na seleção',
+    criado: [
+      'O chapéu do título agora também é o ícone do site: aparece na aba do navegador, ao lado do nome OUTCOME, e como ícone ao adicionar o jogo à tela inicial.',
+      'Na seleção de personagem, ao passar o mouse, tocar ou clicar uma vez em um personagem, aparece ao lado do seu time o painel com nome, apelido, biografia, estilo, mão dominante e as barras de atributos, igual à tela PERSONAGENS.',
+    ],
+    modificado: [
+      'O início da partida não pisca mais a tela em branco e preto: agora aparece o aviso COMEÇOU! de forma suave, entrando e saindo devagar, junto com a buzina.',
+    ],
+    removido: ['Os clarões brancos e pretos alternados no começo da partida.'] },
   { n: 99, v: '0.52.1', title: 'Nova arte do braço com relógio',
     modificado: [
       'A tela ENTRAR NA SALA passou a usar a arte desenhada pelo autor: braço de sobretudo com luva preta e relógio escuro, com a manga cortada se perdendo no preto. O código, o teclado, APAGAR e ENTRAR continuam dentro do relógio e funcionam igual.',
@@ -4455,9 +4469,10 @@ function drawPick(t) {
   let hovC = -2; if (canMe) GS.forEach((c, q) => { const o = tpos(q); if (c >= 0 && takenBy(c) === undefined && over(o.x, o.y, T, TH)) hovC = c; });
   const myP = NET.players.find(p => p.id === me), teamRoom = NET.snap && NET.snap.team > 0 && myP && myP.team >= 0;
   const rank = id => id === me ? 0 : teamRoom && (NET.players.find(p => p.id === id) || {}).team === myP.team ? 1 : 2, ord = [...s.ids].sort((a, b) => rank(a) - rank(b)), nn = Math.max(1, ord.length);
-  const top = 124, bot = gy - 16, sc = clamp(Math.min(IW / nn * .78 / 215, (bot - top - 54) / 275), .3, 1.3), base = bot - 54, sw = IW / nn;
+  const top = 124, bot = gy - 16, PNL = !mapPh && IW >= 560, PW = PNL ? clamp(IW * .29, 200, 330) : 0, AW = IW - PW;   // PNL: faixa à esquerda (do lado do seu time) com as características do personagem
+  const sc = clamp(Math.min(AW / nn * .78 / 215, (bot - top - 54) / 275), .3, 1.3), base = bot - 54, sw = AW / nn;
   ord.forEach((id, j) => {   // em cima: a escolha de cada jogador (você à esquerda)
-    const sx = sw * (j + .5);
+    const sx = PW + sw * (j + .5);
     if (mapPh) {   // MAPA: miniatura grande do mapa votado, no lugar do busto
       const vt = s.votes[id], v = id === me && hovC >= 0 ? hovC : vt, P = v >= 0 && v < RI ? MAPS[v] : null, col = pcol(id);
       const status = id === me && hovC >= 0 ? 'PRÉVIA' : vt === undefined ? 'ESCOLHENDO...' : vt === RI ? 'ALEATÓRIO' : 'VOTOU';
@@ -4486,6 +4501,31 @@ function drawPick(t) {
     txt(status, sx, base + 50, 10, 'rgba(231,228,211,.55)', 'center');
     ctx.restore();
   });
+  if (PNL) {   // características do personagem em foco (mouse em cima, 1 clique ou já confirmado), igual à tela PERSONAGENS
+    const fc = hovC >= 0 ? hovC : (s.marks[me] >= 0 ? s.marks[me] : (s.conf[me] >= 0 ? s.conf[me] : -1)), P = fc >= 0 ? CHARS[fc] : null, px = 18, pw = PW - 30;
+    ctx.save(); ctx.beginPath(); ctx.roundRect(px - 8, top - 14, pw + 16, bot - top + 18, 12); ctx.fillStyle = 'rgba(255,255,255,.035)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.lineWidth = 1; ctx.stroke(); ctx.clip();
+    if (!P) { wrapLines('PASSE O MOUSE OU TOQUE EM UM PERSONAGEM PARA VER AS CARACTERÍSTICAS', pw, 11).forEach((l, i) => txt(l, px + pw / 2, top + (bot - top) / 2 - 8 + i * 16, 11, MUTE, 'center')); }
+    else {
+      const avail = bot - top - 8, many = avail < 330, bsz = many ? 11 : 13, dSz = many ? 11 : 12, dLh = many ? 15 : 18;
+      let y = top + 6; txt(P.name, px, y + 8, clamp(PW / 11, 20, 28), INK, 'left'); txt(P.alias, px, y + 32, 12, INK, 'left'); y += 54;
+      ctx.font = `bold ${dSz}px "Courier New", monospace`;
+      const nStat = CSTATS.length, statH = nStat * (many ? 17 : 21), lineW = ws => { let n = 1, c = ''; for (const w of ws.split(' ')) { const t2 = c ? c + ' ' + w : w; if (ctx.measureText(t2).width > pw && c) { n++; c = w; } else c = t2; } return n; };
+      const showBio = top + 6 + 54 + lineW(P.bio) * dLh + 40 + statH < bot - 6;
+      if (showBio) y = wrapTxt(P.bio, px, y + 4, pw, dLh, dSz, 'rgba(255,255,255,.82)') + 22;
+      txt('ESTILO: ' + P.style, px, y, 11, 'rgba(231,228,211,.6)', 'left'); y += 18;
+      txt('MÃO: ' + (P.hand === 'L' ? 'CANHOTO (ESQ.)' : 'DESTRO (DIR.)'), px, y, 11, INK, 'left'); y += 24;
+      const step = clamp((bot - 8 - y) / nStat, 15, 24), lw0 = many ? 92 : 104, abw = clamp(pw - lw0 - 4, 40, 160), showTxt = pw - lw0 - abw > 56;
+      for (const q of CSTATS) {
+        const r = P.st[q.k];
+        txt(q.label, px, y, 10.5, '#fff', 'left');
+        ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.roundRect(px + lw0, y - 5, abw, 10, 5); ctx.fill();
+        ctx.fillStyle = INK; ctx.beginPath(); ctx.roundRect(px + lw0, y - 5, Math.max(abw * clamp(r / 10, .03, 1), 10), 10, 5); ctx.fill();
+        if (showTxt) txt(q.txt(q.m(r)), px + lw0 + abw + 8, y, 10, INK, 'left');
+        y += step;
+      }
+    }
+    ctx.restore();
+  }
   GS.forEach((c, q) => {   // grade de baixo (26 vagas + aleatório no meio): igual para mapa e personagem
     const { x, y } = tpos(q);
     if (c === -2) { soonTile(x, y); return; }
@@ -4820,6 +4860,29 @@ requestAnimationFrame(loop);
     const l = document.createElement('link'); l.rel = 'manifest';
     l.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
     document.head.appendChild(l);
+  } catch (e) {}
+})();
+</script>
+<script>
+/* Ícone do site: o mesmo chapéu de feltro que fica em cima do O do título (logoHat), desenhado numa tela escondida. */
+(function () {
+  function hatIcon(N) {
+    const c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
+    g.fillStyle = '#020203'; g.beginPath(); g.roundRect(0, 0, N, N, N * .2); g.fill();
+    const s = N * .84 / 104; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s); g.rotate(-.12);
+    logoHat(g, '#e7e4d3', '#020203'); g.restore(); return c.toDataURL('image/png');
+  }
+  try {
+    const i32 = hatIcon(64), i180 = hatIcon(180), i192 = hatIcon(192), i512 = hatIcon(512);
+    const add = (rel, href, sizes) => { const l = document.createElement('link'); l.rel = rel; l.href = href; if (sizes) l.sizes = sizes; document.head.appendChild(l); };
+    document.querySelectorAll('link[rel~="icon"]').forEach(l => l.remove());
+    add('icon', i32, '64x64'); add('apple-touch-icon', i180, '180x180');
+    const old = document.querySelector('link[rel="manifest"]');
+    if (old) {   // refaz o manifesto já com o ícone do chapéu
+      const m = { name: 'OUTCOME', short_name: 'OUTCOME', start_url: location.href.split('#')[0], scope: location.href.replace(/[^\/]*$/, ''), display: 'fullscreen', orientation: 'landscape', background_color: '#0d0a14', theme_color: '#0d0a14',
+        icons: [{ src: i192, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any' }] };
+      old.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
+    }
   } catch (e) {}
 })();
 </script>
