@@ -3395,7 +3395,7 @@ function drawChars(t) {
 const UPDATES = [
   { n: 100, v: '0.52.2', title: 'Ícone do chapéu, largada suave e características na seleção',
     criado: [
-      'O chapéu do título agora também é o ícone do site: aparece na aba do navegador, ao lado do nome OUTCOME, e como ícone ao adicionar o jogo à tela inicial.',
+      'O chapéu do título (preto com borda e faixa creme, sem fundo) agora também é o ícone do site: aparece na aba do navegador, ao lado do nome OUTCOME, e como ícone ao adicionar o jogo à tela inicial.',
       'Na seleção de personagem, ao passar o mouse, tocar ou clicar uma vez em um personagem, aparece ao lado do seu time o painel com nome, apelido, biografia, estilo, mão dominante e as barras de atributos, igual à tela PERSONAGENS.',
     ],
     modificado: [
@@ -4868,9 +4868,8 @@ requestAnimationFrame(loop);
 (function () {
   function hatIcon(N) {
     const c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
-    g.fillStyle = '#020203'; g.beginPath(); g.roundRect(0, 0, N, N, N * .2); g.fill();
-    const s = N * .84 / 104; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s); g.rotate(-.12);
-    logoHat(g, '#e7e4d3', '#020203'); g.restore(); return c.toDataURL('image/png');
+    const s = N * .94 / 110; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s);   // fundo transparente: só o chapéu, reto
+    logoHat(g, '#0d0d11', '#e7e4d3', true); g.restore(); return c.toDataURL('image/png');
   }
   try {
     const i32 = hatIcon(64), i180 = hatIcon(180), i192 = hatIcon(192), i512 = hatIcon(512);
