@@ -3,7 +3,7 @@
    WASD/Setas mover | Mouse mirar | Clique socar/atirar | E pegar arma
    R recarregar | Q sacar/guardar arma | G ou botão direito arremessar arma | C cobertura | H hitbox | Esc menu
    ===================================================================== */
-let RES = devicePixelRatio || 1, RES_MIN = 0.75, _slow = 0, HUD_T0 = -1e9;   // HUD_T0: instante em que a partida começou (anima a entrada do HUD)
+let RES = devicePixelRatio || 1, RES_MIN = 0.75, _slow = 0;
 const canvas = document.getElementById('game');
 let ctx = canvas.getContext('2d');
 const TAU = Math.PI * 2;
@@ -817,7 +817,7 @@ function startGame(tr, keepKills) {
     while (i < total) { const q = lootSpot(); add(q.x, q.y); }
     pickupTimer = L.every;
   }
-  assignRemotes(); touch.ang = 0; updateCam(); if (!keepKills || (M && M.round === 1)) HUD_T0 = performance.now(); setState('play');
+  assignRemotes(); touch.ang = 0; updateCam(); setState('play');
 }
 /* ------------------------------ PARTIDA ------------------------------- */
 function startMatch() {
@@ -2281,7 +2281,7 @@ function drawTopRight() {
   const total = rows.reduce((a, r) => a + r.h, 0) + pad * 2 - 6;
   ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.roundRect(x, 12, pw, total, 14); ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect(x + .5, 12.5, pw - 1, total - 1, 14); ctx.stroke();
-  const dot = (cx, cy, col, a) => { const pa = ctx.globalAlpha; ctx.globalAlpha = pa * a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); ctx.globalAlpha = pa; };
+  const dot = (cx, cy, col, a) => { ctx.globalAlpha = a; ctx.fillStyle = col; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; };
   let y = 12 + pad - 3;
   for (const r of rows) {
     const cy = y + r.h / 2 + 1, xl = x + pad, xr = x + pw - pad;
@@ -2341,8 +2341,6 @@ function drawHUD(t) {
     ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.roundRect(W / 2 - 100, H - 74, 200, 12, 6); ctx.fill();
     ctx.fillStyle = '#e7e4d3'; ctx.beginPath(); ctx.roundRect(W / 2 - 98, H - 72, 196 * clamp(player.stun / player.stunMax, 0, 1), 8, 4); ctx.fill();
   }
-  const hn = performance.now(), he = dl => easeOutExpo(clamp(((hn - HUD_T0) / 1000 - dl) / .7, 0, 1));   // entrada animada do HUD (igual à do menu)
-  const eV = he(.1); ctx.save(); ctx.globalAlpha = eV; ctx.translate(-(1 - eV) * 40, 0);
   // Vida
   ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.roundRect(16, 16, 232, 22, 11); ctx.fill();
   const pct = clamp(player.hp / player.maxHp, 0, 1);
@@ -2350,13 +2348,10 @@ function drawHUD(t) {
   txt(`HP ${Math.ceil(player.hp)}`, 24, 27, 13, '#fff', 'left');
   if (TUT) { /* o tutorial tem o próprio painel */ } else if (training) { txt('MODO SOLITÁRIO', 18, 56, 18, '#e7e4d3', 'left'); txt('Sem bots  ·  munição infinita', 18, 80, 12, 'rgba(255,255,255,.6)', 'left'); }
   else { txt(`ABATES ${kills}`, 18, 56, 18, '#e7e4d3', 'left'); txt(`BOTS VIVOS ${bots.filter(b => !b.dead).length}/${bots.length}`, 18, 80, 14, 'rgba(255,255,255,.6)', 'left'); }
-  ctx.restore();
 
   // Arma selecionada (estilo Kusan): bala, munição, nome e silhueta (proporção das capturas do jogo)
   const CREAM = '#e7e4d3', HK = clamp(W / 2560 * 1.35, .6, 1.05), R = W - 76 * HK;   // margem da borda direita
-  const eW = he(.25);
   if (player.weapon) {
-    ctx.save(); ctx.globalAlpha = eW; ctx.translate((1 - eW) * 60, (1 - eW) * 24);
     const w = WEAPONS[player.weapon], S = w.sil;
     const sc = S.vertical ? S.hudH * HK / S.h : Math.min(({ cleaver: 230, butterfly: 230, sledge: 300, wrench: 280, bottle: 260, pocket: 280, crowbar: 300, sawed: 270 }[player.weapon] || 185) * HK / S.w, W * .42 / S.w), sw = S.w * sc, sh = S.h * sc, sy = H - 46 * HK - sh;   // margem da borda de baixo
     ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 8; ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
@@ -2364,7 +2359,7 @@ function drawHUD(t) {
     ctx.fillStyle = CREAM; ctx.font = `700 ${32 * HK}px "Arial Rounded MT Bold","Trebuchet MS",Arial,sans-serif`;
     if (!w.melee) ctx.fillText(w.name, R, sy - 20 * HK);   // armas brancas: sem nome
     if (!w.melee) {
-      ctx.globalAlpha = eW * (player.reloadT > 0 ? .4 : 1);
+      ctx.globalAlpha = player.reloadT > 0 ? .4 : 1;
       const rs = '/' + player.reserve, ms = String(player.mag), ay = sy - 74 * HK;
       ctx.font = `300 ${34 * HK}px "Segoe UI","Helvetica Neue",Arial,sans-serif`; ctx.fillStyle = 'rgba(231,228,211,.6)';
       const rw = ctx.measureText(rs).width; ctx.fillText(rs, R, ay);
@@ -2376,7 +2371,6 @@ function drawHUD(t) {
       ctx.beginPath(); ctx.moveTo(5, -4.5); ctx.lineTo(15, 0); ctx.lineTo(5, 4.5); ctx.closePath(); ctx.fill();
       ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(-14, -1, 20, 1.4); ctx.restore();
     }
-    ctx.restore();
     ctx.restore();
   }
   if (!player.dead) drawComboMark(W / 2, H - 46 * HK - 46 * HK, 46 * HK);
@@ -2412,9 +2406,8 @@ function drawHUD(t) {
   if (player.reloadT > 0) { ctx.strokeStyle = '#ffd23f'; ctx.beginPath(); ctx.arc(x, y, 18, -Math.PI / 2, -Math.PI / 2 + TAU * (1 - player.reloadT / player.reloadMax)); ctx.stroke(); }
   ctx.shadowBlur = 0;
   if (dmgFlash > 0) { ctx.fillStyle = `rgba(255,30,60,${dmgFlash * .5})`; ctx.fillRect(0, 0, W, H); }
-  { const e = he(.18); ctx.save(); ctx.globalAlpha = e; ctx.translate((1 - e) * 50, -(1 - e) * 14); drawTopRight(); ctx.restore(); }
-  drawMatchHUD(); if (TUT) drawTutorial();
-  if (TOUCH && state === 'play') { const e = he(.3); ctx.save(); ctx.translate(0, (1 - e) * 60); drawTouch(); ctx.restore(); }
+  drawTopRight(); drawMatchHUD(); if (TUT) drawTutorial();
+  if (TOUCH && state === 'play') drawTouch();
 }
 
 /* ------------------------------ MENUS --------------------------------- */
@@ -3112,7 +3105,7 @@ const IC = document.createElement('canvas'), ictx = IC.getContext('2d');
 const SHOTS = [{ t: 3.95, fx: .5, fy: .5 }, { t: 4.3, fx: .3, fy: .62 }, { t: 4.6, fx: .7, fy: .36 }, { t: 4.85, fx: .22, fy: .3 }, { t: 5.1, fx: .62, fy: .7 }], BREAK_T = 5.75, INTRO_END = 8.0;
 const sstep = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
 const HAT0 = performance.now(), hatClock = () => (performance.now() - HAT0) / 1000; let HATC = 0, HATY = 0, HATD = 1;   // HATC = relógio do chapéu no clique | HATY = giro em que ele para | HATD = duração da freada
-function skipIntro() { introT = 0; setState('menu'); }
+function skipIntro() { introT = 0; MENU_LAST = -1e9; setState('menu'); }   // MENU_LAST = -1e9: força o menu a recomeçar a animação de entrada do zero
 
 /* Trincas de cada tiro (fração da diagonal): raios que vão até a borda da tela + anéis em volta do furo */
 const CRACKS = SHOTS.map(() => ({
@@ -3379,8 +3372,7 @@ function drawIntro(T) {
     const PB = preBg(W, H, d), fo = 1 - sstep(.05, .95, u);   // o fundo e a luz da abertura vão sumindo devagar enquanto o menu aparece por cima
     ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = fo; ctx.drawImage(PB.bg, 0, 0, W, H); ctx.globalAlpha = 1;
-    ctx.save(); const z = 1.06 - .06 * easeOutExpo(u); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); ctx.globalAlpha = sstep(.1, .9, u);
-    drawMenu(T); ui = []; ctx.restore();
+    // o menu NÃO é desenhado por trás do chapéu: ele só começa depois que o chapéu passa, e aí faz a mesma animação de entrada (título, linha e botões subindo em sequência) de quando se volta ao menu
     ctx.globalAlpha = fo; ctx.drawImage(PB.vg, 0, 0, W, H); ctx.globalAlpha = 1;
     const HC = hatClock(), S = Math.min(W / 800, H / 600);
     ictx.setTransform(d, 0, 0, d, 0, 0); ictx.clearRect(0, 0, W, H);
