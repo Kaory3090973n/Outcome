@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d0a14">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="screen-orientation" content="landscape">
+<meta name="x5-orientation" content="landscape">
+<meta name="x5-fullscreen" content="true">
+<title>OUTCOME</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="fsGate">
+  <div class="rot">📱</div>
+  <h1>OUTCOME</h1>
+  <p id="fsMsg">Gire o celular para a horizontal e toque no botão para jogar em tela cheia.</p>
+  <button id="fsBtn">TELA CHEIA</button>
+  <p id="fsIos">No iPhone o Safari não tem tela cheia por botão. Toque em <b>Compartilhar</b> e depois em <b>Adicionar à Tela de Início</b>; abrindo por esse ícone o jogo roda sem a barra de endereço.</p>
+  <button id="fsSkip" class="alt" style="display:none">Jogar mesmo assim</button>
+</div>
+
+<script src="game.js"></script>
+<script src="fs.js"></script>
+<script src="icon.js"></script>
+</body>
+</html>
