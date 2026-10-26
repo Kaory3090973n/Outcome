@@ -2172,6 +2172,46 @@ function lobbyBg(IW, IH, ms, baseA, ent, style) {
     const BL = blindsImg(IW, IH), drift = (sec * 5) % BL.P, fl = 1 - .35 * Math.pow(Math.max(0, Math.sin(sec * 2.3) * Math.sin(sec * 5.7)), 6);
     ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * (.85 + .15 * Math.sin(sec * .9)) * fl;
     ctx.translate(IW * .7, IH * .34); ctx.rotate(-.5); ctx.drawImage(BL.cv, -BL.D / 2, -BL.Hh / 2 + drift - BL.P / 2); ctx.restore(); ctx.globalAlpha = baseA;
+  } else if (style === 'lamps') {   // duas lâmpadas penduradas por fios de tamanhos diferentes, balançando fora de compasso, com cone de luz e uma leve falha de energia
+    ctx.save(); ctx.scale(ms, ms);
+    [{ x: .2, cord: .11, ph: 0, a: 1 }, { x: .88, cord: .08, ph: 2.2, a: .85 }].forEach(Lp => {
+      const ang = Math.sin(sec * .5 + Lp.ph) * .07, fl = 1 - .45 * Math.pow(Math.max(0, Math.sin(sec * 3.1 + Lp.ph) * Math.sin(sec * 7.3 + Lp.ph * 2)), 6), cy = IH * Lp.cord, ext = IH * 1.05;
+      ctx.save(); ctx.translate(IW * Lp.x, -4); ctx.rotate(ang); ctx.globalAlpha = baseA * ent(0) * Lp.a;
+      ctx.strokeStyle = 'rgba(231,228,211,.2)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, cy); ctx.stroke();
+      const gc = ctx.createLinearGradient(0, cy + 26, 0, cy + 26 + ext); gc.addColorStop(0, 'rgba(231,228,211,' + (.2 * fl) + ')'); gc.addColorStop(.6, 'rgba(231,228,211,' + (.06 * fl) + ')'); gc.addColorStop(1, 'rgba(231,228,211,0)');
+      ctx.fillStyle = gc; ctx.beginPath(); ctx.moveTo(-17, cy + 26); ctx.lineTo(17, cy + 26); ctx.lineTo(ext * .5, cy + 26 + ext); ctx.lineTo(-ext * .5, cy + 26 + ext); ctx.closePath(); ctx.fill();
+      const gg = ctx.createRadialGradient(0, cy + 24, 0, 0, cy + 24, 70); gg.addColorStop(0, 'rgba(231,228,211,' + (.4 * fl) + ')'); gg.addColorStop(1, 'rgba(231,228,211,0)'); ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(0, cy + 24, 70, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(231,228,211,.55)'; ctx.beginPath(); ctx.moveTo(-9, cy + 8); ctx.lineTo(9, cy + 8); ctx.lineTo(21, cy + 26); ctx.lineTo(-21, cy + 26); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+    ctx.restore(); ctx.globalAlpha = baseA;
+  } else if (style === 'side') {   // luz entrando de lado, por uma janela alta: uma faixa larga e inclinada que respira devagar
+    const sw = Math.sin(sec * .3) * IH * .07, br = (.85 + .15 * Math.sin(sec * .8));
+    ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * br;
+    [[1, .17], [.55, .1]].forEach(([k, al], i) => {
+      const gx = ctx.createLinearGradient(0, 0, IW * .95, 0); gx.addColorStop(0, 'rgba(231,228,211,' + al + ')'); gx.addColorStop(1, 'rgba(231,228,211,0)');
+      const o2 = i * IH * .11; ctx.fillStyle = gx; ctx.beginPath(); ctx.moveTo(0, IH * .1 + sw + o2); ctx.lineTo(IW * .95, IH * (.5 + .1 * k) + sw * 1.4); ctx.lineTo(IW * .95, IH * (.92 - .1 * (1 - k)) + sw * 1.4); ctx.lineTo(0, IH * .42 + sw + o2); ctx.closePath(); ctx.fill();
+    });
+    ctx.restore(); ctx.globalAlpha = baseA;
+  } else if (style === 'sweep') {   // dois holofotes nos cantos de baixo varrendo a tela devagar, cruzando os feixes
+    ctx.save(); ctx.scale(ms, ms); const L = Math.hypot(IW, IH) * 1.1;
+    [[0, 1, 0], [IW, -1, 2.4]].forEach(([ox, dir, ph]) => {
+      ctx.save(); ctx.translate(ox, IH + 10); ctx.rotate(dir * (.42 + .3 * Math.sin(sec * .35 + ph))); ctx.globalAlpha = baseA * ent(0) * (.85 + .15 * Math.sin(sec * 1.1 + ph));
+      const gs = ctx.createLinearGradient(0, 0, 0, -L); gs.addColorStop(0, 'rgba(231,228,211,.22)'); gs.addColorStop(.7, 'rgba(231,228,211,.05)'); gs.addColorStop(1, 'rgba(231,228,211,0)');
+      ctx.fillStyle = gs; ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(9, 0); ctx.lineTo(L * .13, -L); ctx.lineTo(-L * .13, -L); ctx.closePath(); ctx.fill(); ctx.restore();
+    });
+    ctx.restore(); ctx.globalAlpha = baseA;
+  } else if (style === 'pass') {   // farol de carro passando na rua: a cada poucos segundos uma faixa larga de luz inclinada atravessa a tela e some, com um brilho fraco fixo no alto
+    const per = 8, ph = (sec % per) / per, e = Math.sin(Math.PI * ph), x = -IW * .35 + ph * IW * 1.7;
+    ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * .5;
+    const gl = ctx.createRadialGradient(IW / 2, -IH * .15, 0, IW / 2, -IH * .15, IH * .9); gl.addColorStop(0, 'rgba(231,228,211,.09)'); gl.addColorStop(1, 'rgba(231,228,211,0)'); ctx.fillStyle = gl; ctx.fillRect(0, 0, IW, IH);
+    [[0, IW * .26, .085], [IW * .2, IW * .12, .045]].forEach(([dx, hw, al]) => {
+      ctx.save(); ctx.globalAlpha = baseA * ent(0) * e * e; ctx.translate(x + dx + IH * .22, 0); ctx.transform(1, 0, -.45, 1, 0, 0);
+      const gx = ctx.createLinearGradient(-hw, 0, hw, 0); gx.addColorStop(0, 'rgba(231,228,211,0)'); gx.addColorStop(.5, 'rgba(231,228,211,' + al + ')'); gx.addColorStop(1, 'rgba(231,228,211,0)');
+      ctx.fillStyle = gx; ctx.fillRect(-hw, 0, hw * 2, IH); ctx.restore();
+    });
+    ctx.restore(); ctx.globalAlpha = baseA;
+  } else if (style === 'none') {   // sem luz de ambiente (a tela tem a sua própria luz)
   } else {   // luz: um feixe que balança devagar de um lado para o outro, passando por cima do título
     const MB = menuBeam(IW, IH), ang = Math.sin(sec * .4) * .3, ax = IW / 2 + Math.sin(sec * .23 + 1) * IW * .1;
     ctx.save(); ctx.scale(ms, ms); ctx.globalAlpha = baseA * ent(0) * (.85 + .15 * Math.sin(sec * 1.3));
@@ -2184,6 +2224,12 @@ const SCR = {};
 function scrEnter(key) {   // entrada animada: recomeça sempre que a tela volta a aparecer
   const n = performance.now(), o = SCR[key] || (SCR[key] = { t0: n, last: -1e9 }); if (n - o.last > 300) o.t0 = n; o.last = n;
   const el = (n - o.t0) / 1000; return dl => easeOutExpo(clamp((el - dl) / .7, 0, 1));
+}
+function scrHead(text, cx, cy, ts, W, ent) {   // título no estilo do lobby e do ESCOLHER MODO: letras espaçadas, desce e aparece, e uma linha fina se abre embaixo
+  const ls = v => { try { ctx.letterSpacing = v + 'px'; } catch (e) {} }, eT = ent(0), a0 = ctx.globalAlpha;
+  ctx.globalAlpha = a0 * eT; ls(Math.round(ts * .2)); txt(text, cx + ts * .1, cy - (1 - eT) * 22, ts, '#e7e4d3', 'center'); ls(0);
+  const lw = Math.min(W, ts * 11) * ent(.25), ly = Math.round(cy + ts / 2 + 12) + .5; ctx.strokeStyle = 'rgba(231,228,211,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - lw / 2, ly); ctx.lineTo(cx + lw / 2, ly); ctx.stroke();
+  ctx.globalAlpha = a0;
 }
 /* Logo OUTCOME desenhado à mão: letras de traço grosso com irregularidades feitas à mão, sombra deslocada e um fio fino por dentro (estilo cartaz noir),
    e um chapéu de feltro assentado, meio de lado, em cima do primeiro O. Cada letra entra uma depois da outra e o chapéu cai por último. */
@@ -2198,9 +2244,10 @@ function logoLetter(c, ch, sd) {
   else if (ch === 'M') { c.moveTo(6 + j(1), 90); c.lineTo(6 + j(2), 6 + j(3)); c.lineTo(30 + j(4), 58); c.lineTo(54 + j(5), 6 + j(6)); c.lineTo(54 + j(7), 90); }
   else { c.moveTo(50 + j(1), 6 + j(2)); c.lineTo(8 + j(3), 6); c.lineTo(8 + j(4), 90 + j(5)); c.lineTo(50 + j(6), 90 + j(7)); c.moveTo(8, 48 + j(8)); c.lineTo(40 + j(9), 48 + j(10)); }
 }
-function logoHat(c, ink, bg) {   // chapéu de feltro (origem = centro do topo do O; y negativo = para cima)
+function logoHat(c, ink, bg, edge) {   // chapéu de feltro (origem = centro do topo do O; y negativo = para cima)
   const crown = () => { c.beginPath(); c.moveTo(-28, 0); c.lineTo(-26, -24); c.quadraticCurveTo(-20, -35, -12, -34); c.quadraticCurveTo(-5, -33, 0, -26); c.quadraticCurveTo(5, -33, 12, -34); c.quadraticCurveTo(20, -35, 26, -24); c.lineTo(28, 0); c.closePath(); };
   c.fillStyle = ink; c.beginPath(); c.ellipse(0, 2, 52, 10, 0, 0, TAU); c.fill(); crown(); c.fill();
+  if (edge) { c.strokeStyle = bg; c.lineWidth = 3; c.lineJoin = 'round'; c.beginPath(); c.ellipse(0, 2, 52, 10, 0, 0, TAU); c.stroke(); crown(); c.stroke(); c.fillStyle = ink; c.beginPath(); c.ellipse(0, 3, 49, 7.5, 0, .02 * Math.PI, .98 * Math.PI); c.fill(); }   // borda branca em volta do chapéu
   c.fillStyle = bg; c.beginPath(); c.moveTo(-27.4, -6); c.lineTo(27.4, -6); c.lineTo(26.6, -15); c.lineTo(-26.6, -15); c.closePath(); c.fill();   // faixa preta do chapéu
   c.strokeStyle = bg; c.lineWidth = 1.8; c.beginPath(); c.ellipse(0, 2, 52, 10, 0, .08 * Math.PI, .92 * Math.PI); c.stroke();   // aba: fio de sombra na frente
   crown(); c.lineWidth = 1.4; c.stroke();
@@ -2230,14 +2277,21 @@ function drawMenu(t) {
   // o título cresce até a tinta das letras ocupar exatamente a largura do conjunto de botões (canto a canto)
   ctx.font = 'bold 100px "Courier New", monospace'; ctx.textAlign = 'left'; try { ctx.letterSpacing = '0px'; } catch (e) {}
   const mm = ctx.measureText('OUTCOME'), aL = mm.actualBoundingBoxLeft || 0, ink = mm.actualBoundingBoxRight !== undefined ? aL + mm.actualBoundingBoxRight : mm.width, ts = BW / (ink / 100 + 6 * .22);
-  const y0 = Math.max(20, (IH - (ts + 192)) / 2);
+  const y0 = Math.max(32, (IH - (ts + 192)) / 2);
   lobbyBg(IW, IH, ms, baseA, ent);
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / d;   // escala para a área de clique (igual à dos botões)
   // título: desce e aparece; uma linha fina se abre embaixo
   const eT = ent(0); ctx.globalAlpha = baseA * eT;
   try { ctx.letterSpacing = (ts * .22) + 'px'; } catch (e) {}
-  txt('OUTCOME', bx + aL * ts / 100, y0 + ts / 2 - (1 - eT) * 22, ts, INK, 'left');
+  const tx0 = bx + aL * ts / 100, ty0 = y0 + ts / 2 - (1 - eT) * 22;
+  txt('OUTCOME', tx0, ty0, ts, INK, 'left');
+  { // chapéu de feltro assentado, meio de lado, em cima do primeiro O (cai por último)
+    const mo = ctx.measureText('O'), wO = (mo.actualBoundingBoxLeft || 0) + (mo.actualBoundingBoxRight || ts * .5), xO = tx0 - (mo.actualBoundingBoxLeft || 0) + wO / 2, topO = ty0 - (mo.actualBoundingBoxAscent || ts * .35);
+    const hs = wO * 1.35 / 104, eh = ent(.62);
+    ctx.save(); ctx.translate(xO, topO + 9 * hs - (1 - eh) * 46 * hs); ctx.scale(hs, hs); ctx.rotate(-.12 + (1 - eh) * -.5); ctx.globalAlpha = baseA * eh;
+    logoHat(ctx, '#0d0d11', INK, true); ctx.restore();   // chapéu escuro com a borda branca, bem encostado no O ctx.globalAlpha = baseA * eT;
+  }
   try { ctx.letterSpacing = '0px'; } catch (e) {}
   const lw = BW * ent(.25); ctx.strokeStyle = 'rgba(231,228,211,.35)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx - lw / 2, y0 + ts + 22.5); ctx.lineTo(cx + lw / 2, y0 + ts + 22.5); ctx.stroke();
   let y = y0 + ts + 48;
@@ -2273,7 +2327,7 @@ function chevBtn(x, y, s, dir, fn, k) {   // botão quadrado arredondado com set
 }
 function drawSetupPre() {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', solo = soloSetup, n = cfg.team, pre = n > 0 && !solo, N = MAPS.length + 1;
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('setup'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'lamps');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), cyc = (v, m, d) => (v + d + m) % m;
   const noMap = !solo, wide = IW >= 900, tot = Math.min(IW - 40, 1080), pw = wide ? Math.round(tot * .54) : tot, rcw = noMap ? Math.min(IW - 40, 480) : wide ? tot - pw - 40 : tot;   // salas: sem escolha de mapa (a votação acontece depois de criar a sala)
@@ -2302,9 +2356,7 @@ function drawSetupPre() {
   const ts = clamp(Math.min(IW / 14, IH / 14), 22, 38), contH = ts + 34 + nameH + (noMap ? rowsH : wide ? ph : ph + 28 + rowsH) + descH + 40 + 56 + 12 + 46;
   const y0 = Math.max(14, (IH - contH) / 2), px = cx - tot / 2, py = y0 + ts + 34 + nameH;
   // título (mesmo estilo das outras telas)
-  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
-  txt(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : bgSetup ? 'CAMPO DE BATALHA' : 'SALA PERSONALIZADA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
-  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  scrHead(solo ? 'SOLITÁRIO' : pre ? `PARTIDA ${n}v${n}` : bgSetup ? 'CAMPO DE BATALHA' : 'SALA PERSONALIZADA', cx, y0 + ts / 2, ts, IW, ent); ctx.globalAlpha = ent(.2);
   if (!solo) {   // nome da sala (aparece no lugar de SALA dentro do lobby)
     const fx = cx - rcw / 2, fy = y0 + ts + 34, fl = 130, fw = rcw - fl, rn = cfg.roomName || '';
     txt('NOME', fx, fy + 22, 15, INK, 'left');
@@ -2480,14 +2532,12 @@ function drawTutEnd() {
 /* --------------------------- TREINAMENTO: TREINAMENTO | BOTS ------------ */
 function drawTrain(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('train'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'lamps');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), gap = 18;
   const cw = Math.min(230, (IW - 40 - gap) / 2), ch = Math.min(cw * 1.5, IH - 220), totW = cw * 2 + gap, x0 = cx - totW / 2;
   const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + 28 + 44)) / 2);
-  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
-  txt('TREINAMENTO', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
-  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  scrHead('TREINAMENTO', cx, y0 + ts / 2, ts, IW, ent); ctx.globalAlpha = ent(.2);
   const y = y0 + ts + 28;
   [['SOLITÁRIO', () => { soloSetup = true; setState('setup'); }], ['BOTS', () => { soloSetup = false; botsSetup = true; cfg.team = cfg.team > 0 ? cfg.team : 1; saveCfg(); setState('setup'); }]].forEach(([label, fn], i) => {   // mesmo estilo dos cartões de mapa
     const x = x0 + i * (cw + gap), hov = input.mx > x * k && input.mx < (x + cw) * k && input.my > y * k && input.my < (y + ch) * k;
@@ -2506,7 +2556,7 @@ function drawTrain(t) {
 const FLIP = { c: { p: 0, m: 0 }, t: { p: 0, m: 0 }, t0: 0 };
 function drawModes(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', GRN = '#8fd6a4', RED = '#ff7a6b', ent = scrEnter('modes');
-  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent);
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'pass');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), g = 12, bh = 34;
   const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), ext = clamp(IH * .045, 14, 34), availH = IH - (ts + 28) - 70 - 2 * ext;
@@ -2529,8 +2579,7 @@ function drawModes(t) {
   };
   const pill = (label, x, yy, w, h, fn, tp) => {
     const hov = over(x, yy, w, h); frame(x, yy, w, h, hov, Math.min(h / 2, 22));
-    ls(3); const fz = clamp(h * .34, 12, 20); txt(label, x + w / 2, yy + h / 2 + 1, fz, hov ? INK : 'rgba(231,228,211,.8)', 'center'); const tw = ctx.measureText(label).width / 2 + 14; ls(0);
-    ctx.strokeStyle = hov ? 'rgba(222,190,125,.55)' : 'rgba(231,228,211,.22)'; ctx.lineWidth = 1; if (w / 2 - tw > 26) { ctx.beginPath(); ctx.moveTo(x + 22, yy + h / 2 + .5); ctx.lineTo(x + w / 2 - tw, yy + h / 2 + .5); ctx.moveTo(x + w / 2 + tw, yy + h / 2 + .5); ctx.lineTo(x + w - 22, yy + h / 2 + .5); ctx.stroke(); }
+    ls(3); const fz = clamp(h * .34, 12, 20); txt(label, x + w / 2, yy + h / 2 + 1, fz, hov ? INK : 'rgba(231,228,211,.8)', 'center'); ls(0);
     if (hov) tip = tp; ui.push({ x: x * k, y: yy * k, w: w * k, h: h * k, fn });
   };
   const soon = (label, x, yy, w, h) => {   // cartão bloqueado: tracejado, listras e etiqueta EM BREVE
@@ -2544,7 +2593,7 @@ function drawModes(t) {
   const card = (label, sub, x, yy, w, h, fn, tp, kind) => {   // cartão grande ativo (CAMPO DE BATALHA / TUTORIAL)
     const hov = over(x, yy, w, h); frame(x, yy, w, h, hov, 18);
     const ix = x + w - 46, iy = yy + 46, r = 17; ctx.strokeStyle = hov ? INK : 'rgba(231,228,211,.5)'; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, r, 0, TAU);
-    if (kind === 'bg') { ctx.moveTo(ix - r - 7, iy); ctx.lineTo(ix - 6, iy); ctx.moveTo(ix + 6, iy); ctx.lineTo(ix + r + 7, iy); ctx.moveTo(ix, iy - r - 7); ctx.lineTo(ix, iy - 6); ctx.moveTo(ix, iy + 6); ctx.lineTo(ix, iy + r + 7); ctx.stroke(); }
+    if (kind === 'bg') { ctx.save(); ctx.translate(ix, iy); ctx.rotate(-Math.PI / 4); ctx.scale(.95, .95); ctx.lineJoin = 'round'; ctx.beginPath(); ctx.roundRect(-21, -8, 25, 16, 2); ctx.moveTo(-14, -8); ctx.lineTo(-14, 8); ctx.moveTo(4, -8); ctx.quadraticCurveTo(16, -7, 22, 0); ctx.quadraticCurveTo(16, 7, 4, 8); ctx.stroke(); ctx.restore(); }   // bala
     else { ctx.stroke(); ctx.beginPath(); ctx.moveTo(ix - 5, iy - 8); ctx.lineTo(ix + 9, iy); ctx.lineTo(ix - 5, iy + 8); ctx.closePath(); ctx.fill(); }
     ls(2); txt(label, x + 20, yy + h - 46, clamp(w / 20, 14, 22), hov ? INK : 'rgba(231,228,211,.85)', 'left'); ls(0);
     txt(sub, x + 20, yy + h - 22, clamp(w / 34, 9, 12), MUTE, 'left');
@@ -2608,13 +2657,11 @@ function drawMapPreview(mp, x, y, w, h) {   // miniatura desenhada a partir do l
 }
 function drawMaps(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('maps'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'side');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), n = MAPS.length + 1, gap = 14, cw = Math.min(210, (IW - 40 - gap * (n - 1)) / n), ch = cw * 1.2;
   const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + 22 + 64 + 16 + 52 + 12 + 44)) / 2);
-  try { ctx.letterSpacing = Math.round(ts * .2) + 'px'; } catch (e) {}
-  txt('ESCOLHER MAPA', cx + ts * .1, y0 + ts / 2, ts, INK, 'center');
-  try { ctx.letterSpacing = '0px'; } catch (e) {}
+  scrHead('ESCOLHER MAPA', cx, y0 + ts / 2, ts, IW, ent); ctx.globalAlpha = ent(.2);
   const y = y0 + ts + 28, x0 = cx - (n * cw + (n - 1) * gap) / 2;
   for (let i = 0; i < n; i++) {
     const sel = cfg.map === i, mp = MAPS[i], x = x0 + i * (cw + gap), hov = input.mx > x * k && input.mx < (x + cw) * k && input.my > y * k && input.my < (y + ch) * k;
@@ -3035,17 +3082,18 @@ function drawPause() {
   ctx.restore();
 }
 function drawOptions(t) {
-  const wide0 = innerWidth / uiScale() > 860, need = wide0 ? 692 : 932, ms = clamp(Math.min(uiScale(), innerHeight / need), .45, 1);
+  const wide0 = innerWidth / uiScale() > 860, need = wide0 ? 704 : 944, ms = clamp(Math.min(uiScale(), innerHeight / need), .45, 1);
   const W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, wide = W > 860, MUTE = '#8a8a96', INK = '#e7e4d3';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('options');
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'lamps');   // mesmo fundo do menu
   ctx.save(); ctx.scale(ms, ms);
-  const OY = wide ? Math.max(0, Math.round((H - 660) / 2 - 20)) : 0;   // centraliza o conteúdo na altura da tela (PC)
-  txt('OPÇÕES', cx, 34 + OY, clamp(W / 32, 20, 30), INK, 'center');
-  txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar  ·  se repetir, as duas ações trocam de lugar', cx, 62 + OY, 12, bindCapture ? '#ffd23f' : '#5c5c68', 'center');
+  const OY = wide ? Math.max(0, Math.round((H - 672) / 2 - 20)) : 0;   // centraliza o conteúdo na altura da tela (PC)
+  scrHead('OPÇÕES', cx, 30 + OY, clamp(Math.min(W / 14, H / 14), 20, 30), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
+  txt(bindCapture ? 'Aperte a nova tecla...  (Esc cancela)' : 'Clique numa tecla para trocar  ·  se repetir, as duas ações trocam de lugar', cx, 76 + OY, 12, bindCapture ? '#ffd23f' : '#5c5c68', 'center');
   const fixed = [['ATIRAR / SOCAR', 'CLIQUE ESQ.'], ['ARREMESSAR / ESPIAR', 'CLIQUE DIR.'], ['MIRAR', 'MOUSE'], ['PAUSAR / VOLTAR', 'ESC']];
   const CW = 390, rowH = wide ? 46 : 33, KW = 140, kh = rowH - 6;
   const x1 = wide ? cx - CW - 20 : cx - CW / 2, x2 = wide ? cx + 20 : x1;
-  let y1 = 96 + OY;
+  let y1 = 108 + OY;
   txt('TECLADO', x1, y1, 12, MUTE, 'left'); y1 += 18;
   KEYDEFS.forEach(([id, label]) => {
     txt(label, x1, y1 + kh / 2, 13, INK, 'left');
@@ -3053,7 +3101,7 @@ function drawOptions(t) {
     button(on ? 'PRESSIONE...' : keyName(KEYS[id]), x1 + CW - KW, y1, KW, kh, () => { bindCapture = id; }, on ? 'primary' : undefined);
     y1 += rowH;
   });
-  let y2 = wide ? 96 + OY : y1 + 10;
+  let y2 = wide ? 108 + OY : y1 + 10;
   txt('MOUSE E SISTEMA (FIXOS)', x2, y2, 12, MUTE, 'left'); y2 += 18;
   fixed.forEach(([label, val]) => {
     txt(label, x2, y2 + kh / 2, 13, 'rgba(231,228,211,.6)', 'left');
@@ -3073,7 +3121,7 @@ function drawOptions(t) {
   arow('MÚSICA DA PARTIDA', cfg.music ? cfg.music + ' · ' + TRACKS[cfg.music - 1].name : 'ALEATÓRIA', () => { cfg.music = (cfg.music + 5) % 6; audioChanged(); }, () => { cfg.music = (cfg.music + 1) % 6; audioChanged(); });
   if (!wide) y1 = y2;
   txt('As setas do teclado também movem o personagem.', x2, (wide ? y2 : y1) + 8, 11, '#5c5c68', 'left');
-  const by = Math.max(wide ? 96 + OY + 18 + KEYDEFS.length * rowH + 14 : y1 + 30, 0) , bb = Math.min(by, H - 62);
+  const by = Math.max(wide ? 108 + OY + 18 + KEYDEFS.length * rowH + 14 : y1 + 30, 0) , bb = Math.min(by, H - 62);
   button('RESTAURAR PADRÃO', cx - 115, bb, 230, 46, () => { KEYDEFS.forEach(([id,, d]) => KEYS[id] = d); try { localStorage.setItem('oc_keys', JSON.stringify(KEYS)); } catch (e) {} bindCapture = null; });
   cornerBtn('VOLTAR', -1, W, H, () => setState(optBack));
   ctx.restore();
@@ -3112,11 +3160,32 @@ function drawAura(x, y, r, col, t, a, noSp) {
 function silAt(q, x, y, sc, col) {   // silhueta da arma centralizada em (x, y)
   const S = q.sil; ctx.save(); ctx.fillStyle = col; ctx.translate(x - S.w * sc / 2, y - S.h * sc / 2); ctx.scale(sc, sc); S.draw(); ctx.restore();
 }
+function drawBeam(bx, fy, hw, a, t) {   // feixe de luz que cai do alto e termina numa poça de luz no chão, em (bx, fy); hw = meia largura na base
+  if (a <= 0) return;
+  const INKC = '231,228,211', top = -10, ht = fy - top, h0 = 5 + hw * .1;
+  ctx.save();
+  for (let L = 0; L < 3; L++) {   // três camadas: cada uma mais estreita e mais forte
+    const kk = 1 - L * .28, gr = ctx.createLinearGradient(0, top, 0, fy);
+    gr.addColorStop(0, `rgba(${INKC},0)`); gr.addColorStop(.4, `rgba(${INKC},${.03 * (L + 1)})`); gr.addColorStop(1, `rgba(${INKC},${.07 * (L + 1)})`);
+    const w = hw * kk * (1 + .02 * Math.sin(t * 1.7 + L));
+    ctx.globalAlpha = a; ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(bx - h0 * kk, top); ctx.lineTo(bx + h0 * kk, top); ctx.lineTo(bx + w, fy); ctx.ellipse(bx, fy, w, w * .2, 0, 0, Math.PI); ctx.closePath(); ctx.fill();
+  }
+  ctx.save(); ctx.translate(bx, fy); ctx.scale(1, .2);   // poça de luz no chão
+  const pg = ctx.createRadialGradient(0, 0, 0, 0, 0, hw * 1.15); pg.addColorStop(0, `rgba(${INKC},.3)`); pg.addColorStop(.6, `rgba(${INKC},.09)`); pg.addColorStop(1, `rgba(${INKC},0)`);
+  ctx.globalAlpha = a; ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, hw * 1.15, 0, TAU); ctx.fill(); ctx.restore();
+  ctx.fillStyle = `rgb(${INKC})`;   // poeira flutuando dentro do feixe
+  for (let i = 0; i < 16; i++) {
+    const sd = i * 53.7, fr = v => v - Math.floor(v), ph = (t * (.05 + .05 * fr(sd * 1.7)) + fr(sd * 3.1)) % 1, wy = h0 + (hw - h0) * ph;
+    ctx.globalAlpha = a * .55 * Math.sin(Math.PI * ph); ctx.fillRect(bx + (fr(sd * 5.3) * 2 - 1) * wy * .9 + Math.sin(t * .8 + sd) * 4, top + ht * ph, 1.6, 1.6);
+  }
+  ctx.restore();
+}
 function drawPicker(t, o) {
   const S0 = o.st;
   const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, N = o.N, wide = W > 820;
   const dt = clamp(t - S0.last, 0, .05); S0.last = t;
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter(o.title);
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'none');   // mesmo fundo do menu, sem luz de ambiente (o feixe é da própria tela)
   ctx.save(); ctx.scale(ms, ms);
   // animação da faixa e controle do tempo da arma selecionada
   S0.p += (S0.idx - S0.p) * (1 - Math.exp(-13 * dt)); if (Math.abs(S0.idx - S0.p) < .004) S0.p = S0.idx;
@@ -3124,55 +3193,44 @@ function drawPicker(t, o) {
   if (cur !== S0.prev) { if (S0.prev > 0 && S0.selT > 0) S0.out = { k: S0.prev, T: S0.selT, life: .16 }; S0.prev = cur; S0.selT = 0; }
   if (cur > 0 && Math.abs(S0.idx - S0.p) < .35) S0.selT += dt;   // a animação começa quando a faixa assenta
   if (S0.out) { S0.out.life -= dt; if (S0.out.life <= 0) S0.out = null; }
-  txt(o.title, cx, 38, clamp(W / 32, 20, 32), '#e7e4d3', 'center');
+  scrHead(o.title, cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent);
   // medidas
   const sp = clamp(W / 7.4, 64, 150), sw = sp - 12, sh = clamp(sw * .56, 40, 84), stripY = H - 76 - sh / 2, top = 84, bot = stripY - sh / 2 - 26;
   const R = wide ? clamp(Math.min((bot - top) / 2, W * .21), 70, 200) : clamp(Math.min(W * .28, (bot - top) * .17), 44, 100);
   const endX = wide ? W * .34 : cx, endY = wide ? (top + bot) / 2 : top + R + 4;
   const g = { W, H, wide, cx, endX, endY, top, bot, R, sw, sh, stripY };
   const show = (it, T, A) => {
-    const ac = o.accent(it);
-    const bi = easeOut3(clamp(T / .5, 0, 1)), dp = easeIO3(clamp((T - .25) / .85, 0, 1)), ga = easeOut3(clamp((T - 1.1) / .6, 0, 1)), up = easeOut3(clamp((T - 2.0) / .4, 0, 1)), sl = easeIO3(clamp((T - 2.45) / .6, 0, 1));
-    const px = cx + (endX - cx) * sl, py = stripY + (endY - stripY) * up + Math.sin(t * 2) * 3 * sl, ay = endY + Math.sin(t * 2) * 3 * sl;
-    const bt = stripY - sh / 2, srcY = bt - (bt - endY) * dp;   // a fonte da luz sai do retângulo e sobe até o ponto do meio
-    // 1) a bola de luz (a mesma mistura da aura) já sai subindo direto do retângulo, sem se formar antes, e sobe naturalmente até o alto, onde a luz vai se acumulando
-    const srcC = stripY - (stripY - endY) * dp, orbA = A * clamp((T - .25) / .12, 0, 1) * (1 - ga), orbR = sw * .5 + R * .2 * dp, trA = Math.sin(Math.PI * dp);
-    for (let j = 3; j >= 1; j--) {   // rastro curto de luz que fica para trás enquanto sobe e some antes de chegar ao alto
-      const dj = Math.max(0, dp - j * .1);
-      drawAura(cx, stripY - (stripY - endY) * dj, orbR * (1 - j * .14), ac, t, orbA * trA * (1 - j * .22) * .7, true);
-    }
-    drawAura(cx, srcC, orbR, ac, t, orbA, true);
-    drawAura(cx, srcC, orbR * .7, ac, t, orbA * .8, true);   // núcleo mais denso da bola
-    // 2) a aura se forma no ponto de luz e acompanha a arma para a esquerda
-    const gAll = .3 * dp + .7 * ga;   // o acúmulo no alto começa quando a bola sobe e continua até a aura completa
-    drawAura(px, ay, R * (o.auraK || 1) * (.15 + .85 * gAll), ac, t, A * gAll);
-    // 3) só depois a personagem/arma aparece, subindo do retângulo
+    const ac = '#e7e4d3';   // sem cor própria de cada peça: a luz é sempre a mesma, como no resto do jogo
+    const bm = easeOut3(clamp((T - .1) / .5, 0, 1)), up = easeOut3(clamp((T - .55) / .4, 0, 1)), sl = easeIO3(clamp((T - 1.0) / .6, 0, 1));
+    const px = cx + (endX - cx) * sl, py = stripY + (endY - stripY) * up + Math.sin(t * 2) * 3 * sl;
+    // o feixe cai do alto sobre o retângulo escolhido e acompanha a peça até o lugar final, onde forma uma poça de luz no chão
+    drawBeam(px, py + (-sh * .5 + (R * (o.floorK || .6) + sh * .5) * up), (sw * .7 + (R * (o.auraK || 1) * .5 - sw * .7) * up) * (.4 + .6 * bm), A * bm, t);
     if (up > 0) o.hero(it, px, py, up, g, A, ac);
     // estatísticas (lado direito)
-    const pa = easeOut3(clamp((T - 2.75) / .45, 0, 1)); if (pa <= 0) return;
+    const pa = easeOut3(clamp((T - 1.5) / .45, 0, 1)); if (pa <= 0) return;
     o.panel(it, (wide ? W * .54 : 24) + (1 - pa) * 40, wide ? W * .41 : W - 48, pa, A, g);
   };
   if (S0.out) show(S0.out.k, S0.out.T, Math.max(0, S0.out.life / .16));
   if (cur > 0 && S0.selT > 0) show(cur, S0.selT, 1);
   // faixa de retângulos deitados (as pontas ficam cortadas)
-  const half = Math.min(3 * sp - sw * .1, W / 2);
-  ctx.save(); ctx.beginPath(); ctx.rect(cx - half, stripY - sh, half * 2, sh * 2); ctx.clip();
+  const half = Math.min(3 * sp - sw * .1, W / 2), eS = ent(.3), rise = (1 - eS) * 18;   // a faixa sobe e aparece na entrada da tela
+  ctx.save(); ctx.translate(0, rise); ctx.beginPath(); ctx.rect(cx - half, stripY - sh, half * 2, sh * 2); ctx.clip();
   for (let k = Math.floor(S0.p) - 4; k <= Math.floor(S0.p) + 5; k++) {
     const rel = k - S0.p, ar = Math.abs(rel); if (ar > 3.6) continue;
     const it = wrapN(k, N), q = it ? o.accent(it) : null, x = cx + rel * sp, c = clamp(1 - ar, 0, 1), s = 1 + .1 * c, w2 = sw * s, h2 = sh * s;
-    const hov = input.mx / ms > x - sw / 2 && input.mx / ms < x + sw / 2 && input.my / ms > stripY - sh / 2 && input.my / ms < stripY + sh / 2;
-    ctx.save(); ctx.globalAlpha = clamp(1.15 - ar * .12, .35, 1);
+    const hov = input.mx / ms > x - sw / 2 && input.mx / ms < x + sw / 2 && input.my / ms - rise > stripY - sh / 2 && input.my / ms - rise < stripY + sh / 2;
+    ctx.save(); ctx.globalAlpha = clamp(1.15 - ar * .12, .35, 1) * eS;
     ctx.beginPath(); ctx.roundRect(x - w2 / 2 + .5, stripY - h2 / 2 + .5, w2 - 1, h2 - 1, 12);
     const gr = ctx.createLinearGradient(0, stripY - h2 / 2, 0, stripY + h2 / 2); gr.addColorStop(0, hov ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.05)'); gr.addColorStop(1, hov ? 'rgba(255,255,255,.03)' : 'rgba(255,255,255,.012)');   // mesmo fundo dos cartões 1v1..4v4
     ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = hov ? '#e7e4d3' : 'rgba(255,255,255,.14)'; ctx.lineWidth = hov ? 2 : 1; ctx.stroke();
-    if (q && c > 0) { ctx.save(); ctx.globalAlpha *= c; ctx.fillStyle = q + '33'; ctx.fill(); ctx.strokeStyle = q; ctx.stroke(); ctx.restore(); }
-    if (it && !(o.liftIcon && it === cur && S0.selT > 2.0)) o.icon(it, x, stripY, w2, h2);   // a arma que sobe sai do retângulo: ele fica vazio
+    if (q && c > 0) { ctx.save(); ctx.globalAlpha *= c; ctx.fillStyle = 'rgba(231,228,211,.12)'; ctx.fill(); ctx.strokeStyle = '#e7e4d3'; ctx.stroke(); ctx.restore(); }
+    if (it && !(o.liftIcon && it === cur && S0.selT > .55)) o.icon(it, x, stripY, w2, h2);   // a arma que sobe sai do retângulo: ele fica vazio
     ctx.restore();
-    if (ar <= 3) ui.push({ x: (x - sw / 2) * ms, y: (stripY - sh / 2) * ms, w: sw * ms, h: sh * ms, fn: () => { S0.idx = k; } });
+    if (ar <= 3) ui.push({ x: (x - sw / 2) * ms, y: (stripY - sh / 2 + rise) * ms, w: sw * ms, h: sh * ms, fn: () => { S0.idx = k; } });
   }
   ctx.restore();
-  cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
-  txt(TOUCH ? o.hintT : o.hint, cx, H - 18, 12, 'rgba(255,255,255,.4)', 'center');
+  ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
+  ctx.globalAlpha = ent(.6); txt(TOUCH ? o.hintT : o.hint, cx, H - 18, 12, 'rgba(255,255,255,.4)', 'center'); ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -3204,7 +3262,7 @@ const weaponPanel = (it, rx, rw, pa, A, g) => {
     let step = 34;
     if (wide) { step = clamp((bot + 18 - (top + 28) - fixed) / (stats.length - 1), 18, 34); y = Math.max(top + 28, endY - (fixed + (stats.length - 1) * step) / 2); }
     ctx.save(); ctx.globalAlpha = A * pa;
-    txt(q.model, rx, y, wide ? clamp(W / 40, 24, 38) : 24, q.accent, 'left');
+    txt(q.model, rx, y, wide ? clamp(W / 40, 24, 38) : 24, '#e7e4d3', 'left');
     txt(q.melee ? q.cal : 'Calibre ' + q.cal, rx, y + (wide ? 40 : 28), wide ? 18 : 15, '#e7e4d3', 'left');
     txt(q.kind || 'ARMA', rx, y + (wide ? 66 : 50), 13, 'rgba(255,255,255,.55)', 'left');
     y = wrapTxt(q.desc, rx, y + (wide ? 102 : 76), rw, wide ? 22 : 18, wide ? 14 : 12, 'rgba(255,255,255,.82)') + (wide ? 44 : 30);
@@ -3212,14 +3270,14 @@ const weaponPanel = (it, rx, rw, pa, A, g) => {
     for (const [label, val, pct] of stats) {
       txt(label, rx, y, 13, '#fff', 'left');
       ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.roundRect(rx + 120, y - 6, bw, 12, 6); ctx.fill();
-      ctx.fillStyle = q.accent; ctx.beginPath(); ctx.roundRect(rx + 120, y - 6, Math.max(bw * clamp(pct, .03, 1) * pa, 12), 12, 6); ctx.fill();
+      ctx.fillStyle = '#e7e4d3'; ctx.beginPath(); ctx.roundRect(rx + 120, y - 6, Math.max(bw * clamp(pct, .03, 1) * pa, 12), 12, 6); ctx.fill();
       txt(val, rx + 120 + bw + 12, y, 12, '#e7e4d3', 'left'); y += step;
     }
     ctx.restore();
 };
 const INFO = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
 const resetPicker = st => { st.idx = 0; st.p = 0; st.selT = 0; st.prev = 0; st.out = null; };
-const drawInfo = t => drawPicker(t, { st: INFO, N: WKEYS.length + 1, title: 'ARMAS', liftIcon: true, auraK: 1.5, hero: weaponHero, panel: weaponPanel,
+const drawInfo = t => drawPicker(t, { st: INFO, N: WKEYS.length + 1, title: 'ARMAS', liftIcon: true, auraK: 1.5, floorK: .5, hero: weaponHero, panel: weaponPanel,
   hint: 'Roda do mouse, setas ← → ou clique trocam de arma | Esc volta', hintT: 'Toque nos retângulos para trocar de arma',
   accent: it => WEAPONS[WKEYS[it - 1]].accent,
   icon: (it, x, y, w, h) => { const q = WEAPONS[WKEYS[it - 1]], S = q.sil; silAt(q, x, y, Math.min(w * .72 / S.w, h * .62 / S.h), '#ffffff'); } });
@@ -3314,7 +3372,7 @@ const BUST_H = 255;   // altura do busto (da cintura ao topo da cabeça), em uni
 const charHero = (it, px, py, up, g, A, ac) => {
   const P = CHARS[it - 1], sF = Math.min(g.bot - g.top - 30, g.R * 1.75) / BUST_H, sS = g.sh * .8 / BUST_H, s = sS + (sF - sS) * up;
   const base = py + BUST_H * s / 2;
-  ctx.save(); ctx.shadowColor = ac; ctx.shadowBlur = 14 * up;
+  ctx.save(); ctx.shadowBlur = 0;
   bustAt(P, 'w', px, base, s, A * (1 - clamp(up * 1.5 - .1, 0, 1)));   // sai do retângulo branco e ganha cor
   ctx.shadowBlur = 0; bustAt(P, 'c', px, base, s, A * clamp(up * 1.5 - .1, 0, 1)); ctx.restore();
 };
@@ -3326,17 +3384,17 @@ const charPanel = (it, rx, rw, pa, A, g) => {
   let step = 34;
   if (wide) { step = clamp((bot + 18 - (top + 28) - fixed) / (CSTATS.length - 1), 18, 34); y = Math.max(top + 28, endY - (fixed + (CSTATS.length - 1) * step) / 2); }
   ctx.save(); ctx.globalAlpha = A * pa;
-  txt(P.name, rx, y, wide ? clamp(W / 40, 24, 38) : 24, P.accent, 'left'); txt(P.alias, rx, y + (wide ? 32 : 28), 14, '#e7e4d3', 'left');
+  txt(P.name, rx, y, wide ? clamp(W / 40, 24, 38) : 24, '#e7e4d3', 'left'); txt(P.alias, rx, y + (wide ? 32 : 28), 14, '#e7e4d3', 'left');
   const bioEnd = wrapTxt(P.bio, rx, y + (wide ? 66 : 54), rw, wide ? 22 : 18, wide ? 14 : 12, 'rgba(255,255,255,.82)');
   let sy = bioEnd + 28;
-  txt('ESTILO: ' + P.style, rx, sy, 13, P.accent, 'left'); sy += 24;
+  txt('ESTILO: ' + P.style, rx, sy, 13, 'rgba(231,228,211,.6)', 'left'); sy += 24;
   txt('MÃO DOMINANTE: ' + (P.hand === 'L' ? 'CANHOTO (ESQUERDA)' : 'DESTRO (DIREITA)'), rx, sy, 13, '#e7e4d3', 'left'); sy += 32;
   const abw = clamp(rw - 270, 100, 260); if (!wide) step = clamp((bot + 18 - sy) / CSTATS.length, 18, 34);
   for (const q of CSTATS) {
     const r = P.st[q.k];
     txt(q.label, rx, sy, 13, '#fff', 'left');
     ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.beginPath(); ctx.roundRect(rx + 120, sy - 6, abw, 12, 6); ctx.fill();
-    ctx.fillStyle = P.accent; ctx.beginPath(); ctx.roundRect(rx + 120, sy - 6, Math.max(abw * clamp(r / 10, .03, 1) * pa, 12), 12, 6); ctx.fill();
+    ctx.fillStyle = '#e7e4d3'; ctx.beginPath(); ctx.roundRect(rx + 120, sy - 6, Math.max(abw * clamp(r / 10, .03, 1) * pa, 12), 12, 6); ctx.fill();
     txt(q.txt(q.m(r)), rx + 120 + abw + 12, sy, 12, '#e7e4d3', 'left'); sy += step;
   }
   ctx.restore();
@@ -3344,7 +3402,7 @@ const charPanel = (it, rx, rw, pa, A, g) => {
 const CHP = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
 function drawChars(t) {
   for (const P of CHARS) if (!P._img) makeCharImg(P);
-  drawPicker(t, { st: CHP, N: CHARS.length + 1, title: 'PERSONAGENS', hero: charHero, panel: charPanel,
+  drawPicker(t, { st: CHP, N: CHARS.length + 1, title: 'PERSONAGENS', floorK: .85, auraK: 1.1, hero: charHero, panel: charPanel,
     hint: 'Roda do mouse, setas ← → ou clique trocam de personagem | Esc volta', hintT: 'Toque nos retângulos para trocar de personagem',
     accent: it => CHARS[it - 1].accent,
     icon: (it, x, y, w, h) => { const s = Math.min(h * .8 / BUST_H, w * .42 / 150); bustAt(CHARS[it - 1], 'w', x, y + BUST_H * s / 2, s, 1); } });
@@ -3356,6 +3414,25 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 97, v: '0.51.2', title: 'Chapéu no título e feixe de luz',
+    criado: [
+      'Chapéu de feltro escuro, com borda branca, encostado em cima do primeiro O do título OUTCOME no menu. A fonte continua a mesma, sem sombra.',
+      'Feixe de luz nas telas ARMAS e PERSONAGENS: a luz cai do alto sobre a peça escolhida, forma uma poça de luz no chão, tem poeira flutuando e acompanha a arma ou o personagem até o lugar final.',
+      'Três novos efeitos de luz de fundo, no mesmo clima do menu: persiana, lâmpadas penduradas e luz lateral. Cada tela usa a sua.',
+    ],
+    modificado: [
+      'O botão JOGAR do menu ficou com a mira e o cartão CAMPO DE BATALHA ficou com a bala.',
+      'O ESCOLHER MODO deixou de repetir a luz do menu e passou a ter um brilho fraco no alto e faróis de carro passando, com uma faixa de luz que atravessa a tela de tempos em tempos.',
+      'Configuração da partida, treinamento, mapa, votação, sala e entrar na sala ganharam o fundo do menu. Configuração, treinamento e mapa também ganharam a linha fina sob o título e a entrada animada.',
+      'Em ARMAS e PERSONAGENS a peça sai do retângulo mais cedo, e o destaque do retângulo, o nome e as barras ficaram na cor neutra do jogo, sem a cor de cada arma ou personagem.',
+    ],
+    removido: ['A aura colorida das telas ARMAS e PERSONAGENS e o brilho colorido em volta do personagem.', 'Os dois traços dentro do botão PERSONALIZADA.'] },
+  { n: 96, v: '0.51.1', title: 'Telas no mesmo visual do menu',
+    modificado: [
+      'As telas PERSONAGENS, ARMAS, OPÇÕES e ATUALIZAÇÃO agora seguem a mesma ideia do menu e do ESCOLHER MODO: fundo escuro com grade, partículas e feixe de luz, título com letras espaçadas e uma linha fina que se abre embaixo.',
+      'Entrada animada nessas quatro telas: o título desce e aparece, e o resto surge em seguida. Em PERSONAGENS e ARMAS a faixa de retângulos sobe junto.',
+    ],
+    removido: ['O fundo liso cinza-escuro e o título simples dessas quatro telas.'] },
   { n: 95, v: '0.51.0', title: 'Nova abertura do chapéu',
     criado: ['Nova abertura: um chapéu de feltro preto em 3D flutua e gira no escuro, com o aviso CLIQUE PARA COMEÇAR embaixo (o toque também libera o som do navegador).', 'Ao clicar, o giro do chapéu freia, a mão de um homem (só silhueta, com o rosto na sombra) pega o chapéu e o assenta na cabeça sem girar. Ele olha de leve para a tela e dá 5 tiros.', 'Cada tiro deixa rachaduras no vidro da tela; no fim o vidro quebra exatamente pelas rachaduras, os cacos caem e o menu aparece.'],
     removido: ['A abertura antiga, da senhora de branco com 3 tiros.'] },
@@ -4122,9 +4199,10 @@ function wrapLines(text, maxW, size) {
 }
 function drawLog(t) {
   const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2;
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('log');
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'side');   // mesmo fundo do menu
   ctx.save(); ctx.scale(ms, ms);
-  const colW = Math.min(760, W - 32), x0 = cx - colW / 2, top = 76, bot = H - 84, pad = 20, LH = 19, FS = 13, inner = colW - pad * 2 - 16;
+  const colW = Math.min(760, W - 32), x0 = cx - colW / 2, top = 84, bot = H - 84, pad = 20, LH = 19, FS = 13, inner = colW - pad * 2 - 16;
   const SECT = [['criado', 'CRIADO', '#8fd6a4'], ['modificado', 'MODIFICADO', '#e7c27a'], ['removido', 'REMOVIDO', '#e08a8a']];
   const ops = [], cards = []; let y = 0;
   for (const u of UPDATES) {
@@ -4139,7 +4217,7 @@ function drawLog(t) {
     y += pad - 8; cards.push({ y: y1, h: y - y1 }); y += 16;
   }
   const maxS = Math.max(0, y - (bot - top)); logScroll = clamp(logScroll, 0, maxS);
-  txt('ATUALIZAÇÃO', cx, 38, clamp(W / 32, 20, 32), '#e7e4d3', 'center');
+  scrHead('ATUALIZAÇÃO', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
   ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, bot - top); ctx.clip(); ctx.translate(0, top - logScroll);
   for (const c of cards) { ctx.beginPath(); ctx.roundRect(x0 + .5, c.y + .5, colW - 1, c.h - 1, 18); const gr = ctx.createLinearGradient(0, c.y, 0, c.y + c.h); gr.addColorStop(0, 'rgba(255,255,255,.05)'); gr.addColorStop(1, 'rgba(255,255,255,.012)'); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke(); }   // mesmo fundo dos cartões 1v1..4v4
   for (const o of ops) {
@@ -4350,7 +4428,7 @@ const mapClick = v => { if (NET.host) selVote('host', v); else netSend(NET.conns
 const charClick = c => { if (NET.host) selPick('host', c); else netSend(NET.conns.host, { t: 'pick', c }); };
 function drawPick(t) {
   const s = NET.sel, ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+  const ent = scrEnter('pick'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'side');
   if (!s) return;
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), me = NET.me || 'host', mapPh = s.ph === 'map' || s.ph === 'mapres', timed = s.ph === 'map' || s.ph === 'char';
@@ -4570,7 +4648,7 @@ function clientStep(dt) {
 
 function drawRoom(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3', GREEN = '#8fd6a4';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
+  const ent = scrEnter('room'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'lamps'); ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (devicePixelRatio || 1), pw = Math.min(IW - 40, 460), px = cx - pw / 2, rh = 38, rg = 5, cap = NET.cap || 8, snap = NET.snap || {};
   const me = NET.players.find(p => p.id === NET.me), n = NET.players.length, rc = NET.players.filter(p => p.ready).length, all = n > 0 && rc === n && !NET.err;
   const teamRoom = snap.team > 0, rowsH = teamRoom ? 34 + 28 + snap.team * (rh + rg) + 28 : cap * (rh + rg);
@@ -4634,7 +4712,7 @@ function drawRoom(t) {
 }
 function drawJoin(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
-  ctx.fillStyle = '#0d0d11'; ctx.fillRect(0, 0, innerWidth, innerHeight); ctx.save(); ctx.scale(ms, ms);
+  const ent = scrEnter('join'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'blinds'); ctx.save(); ctx.scale(ms, ms);
   const bs = 64, bg = 12, nw = 84, nh = 50, ng = 8, contH = 34 + 28 + bs + 40 + 4 * (nh + ng) + 52, y0 = Math.max(10, (IH - contH) / 2);
   try { ctx.letterSpacing = '5px'; } catch (e) {} txt('ENTRAR NA SALA', cx + 3, y0 + 15, 26, INK, 'center'); try { ctx.letterSpacing = '0px'; } catch (e) {}
   const by = y0 + 62, bx = cx - (4 * bs + 3 * bg) / 2;
