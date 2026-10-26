@@ -439,6 +439,31 @@ function sfxHover() {   // passar o mouse: tique bem baixinho
   if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
   nz(sfxBus, t, .02, 'highpass', 5000, .05, .0005, .012); tone(sfxBus, t, 'sine', 1900, 1500, .02, .02, .0005, .014);
 }
+/* sons das telas ARMAS e PERSONAGENS: tique ao rolar a barra, e a sequência de quando a peça escolhida aparece (luz, subida, encaixe, estatísticas) */
+function sfxScroll(dir) {   // barra de seleção: tique de catraca (mais agudo ao avançar, mais grave ao voltar)
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002, f = (dir > 0 ? 1 : .82) * (1 + (Math.random() - .5) * .05);
+  nz(sfxBus, t, .03, 'highpass', 4200 * f, .16, .0005, .018);
+  tone(sfxBus, t, 'square', 1250 * f, 800 * f, .03, .05, .0005, .022);
+  tone(sfxBus, t + .008, 'sine', 330 * f, 190 * f, .07, .3, .001, .06);
+}
+function sfxPickBeam() {   // a luz cai sobre o retângulo escolhido: zumbido subindo com chiado
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
+  tone(sfxBus, t, 'sawtooth', 90, 340, .45, .05, .08, .4); tone(sfxBus, t, 'sine', 220, 880, .4, .07, .06, .34); nz(sfxBus, t, .4, 'bandpass', 900, .07, .06, .34, 3200);
+}
+function sfxPickRise(w) {   // a peça sobe do retângulo: arma = saque metálico; personagem = pancada surda com brilho
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
+  if (w) { sfxHolster(); nz(sfxBus, t + .05, .05, 'highpass', 3600, .18, .0005, .03); tone(sfxBus, t + .06, 'triangle', 2600, 0, .3, .05, .001, .26); }
+  else { tone(sfxBus, t, 'sine', 170, 70, .16, .45, .002, .14); nz(sfxBus, t, .12, 'bandpass', 1800, .1, .002, .1, 600); tone(sfxBus, t + .03, 'triangle', 1900, 0, .2, .04, .001, .17); }
+}
+function sfxPickSettle() {   // a peça encaixa no lugar: baque suave e brilho que se apaga
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
+  tone(sfxBus, t, 'sine', 125, 55, .16, .4, .002, .14); nz(sfxBus, t, .05, 'lowpass', 900, .12, .001, .04);
+  tone(sfxBus, t + .02, 'sine', 1760, 0, .3, .04, .002, .26); tone(sfxBus, t + .06, 'sine', 2349, 0, .28, .03, .002, .24);
+}
+function sfxPickPanel() {   // as estatísticas aparecem: dois tiques
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002;
+  for (let i = 0; i < 2; i++) { nz(sfxBus, t + i * .07, .02, 'highpass', 5200, .08, .0005, .014); tone(sfxBus, t + i * .07, 'sine', 1300 + i * 380, 1000 + i * 380, .04, .06, .0005, .03); }
+}
 let HOVK = null, HOVF = false;
 function hoverTick(key) { HOVF = true; if (HOVK !== key) { HOVK = key; if (UI_HOVER) sfxHover(); } }
 function uiHit(b) { b.fn(); sfxClick(b.pri); }   // todo clique em botão/aba/item de menu passa por aqui (mouse e toque)
@@ -3583,8 +3608,17 @@ function drawPicker(t, o) {
   // animação da faixa e controle do tempo da arma selecionada
   S0.p += (S0.idx - S0.p) * (1 - Math.exp(-13 * dt)); if (Math.abs(S0.idx - S0.p) < .004) S0.p = S0.idx;
   const cur = wrapN(S0.idx, N);
-  if (cur !== S0.prev) { if (S0.prev > 0 && S0.selT > 0) S0.out = { k: S0.prev, T: S0.selT, life: .16 }; S0.prev = cur; S0.selT = 0; }
+  if (S0.sI == null) S0.sI = S0.idx;   // ao abrir a tela, sem som
+  if (S0.idx !== S0.sI) { if (S0.sk) S0.sk = 0; else sfxScroll(S0.idx > S0.sI ? 1 : -1); S0.sI = S0.idx; }   // rolar a barra (roda, setas): tique; o clique numa aba já tem o som de botão
+  if (cur !== S0.prev) { if (S0.prev > 0 && S0.selT > 0) S0.out = { k: S0.prev, T: S0.selT, life: .16 }; S0.prev = cur; S0.selT = 0; S0.sf = 0; }
   if (cur > 0 && Math.abs(S0.idx - S0.p) < .35) S0.selT += dt;   // a animação começa quando a faixa assenta
+  if (cur > 0) {   // sons do aparecimento da peça, no mesmo ritmo da animação (luz, subida, encaixe, estatísticas)
+    const T = S0.selT, w = o.title === 'ARMAS', f = S0.sf | 0;
+    if (!(f & 1) && T > .1) { S0.sf = f | 1; sfxPickBeam(); }
+    else if (!(f & 2) && T > .55) { S0.sf = f | 2; sfxPickRise(w); }
+    else if (!(f & 4) && T > 1.0) { S0.sf = f | 4; sfxPickSettle(); }
+    else if (!(f & 8) && T > 1.5) { S0.sf = f | 8; sfxPickPanel(); }
+  }
   if (S0.out) { S0.out.life -= dt; if (S0.out.life <= 0) S0.out = null; }
   scrHead(o.title, cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent);
   // medidas
@@ -3619,7 +3653,7 @@ function drawPicker(t, o) {
     if (q && c > 0) { ctx.save(); ctx.globalAlpha *= c; ctx.fillStyle = 'rgba(231,228,211,.12)'; ctx.fill(); ctx.strokeStyle = '#e7e4d3'; ctx.stroke(); ctx.restore(); }
     if (it && !(o.liftIcon && it === cur && S0.selT > .55)) o.icon(it, x, stripY, w2, h2);   // a arma que sobe sai do retângulo: ele fica vazio
     ctx.restore();
-    if (ar <= 3) ui.push({ x: (x - sw / 2) * ms, y: (stripY - sh / 2 + rise) * ms, w: sw * ms, h: sh * ms, fn: () => { S0.idx = k; } });
+    if (ar <= 3) ui.push({ x: (x - sw / 2) * ms, y: (stripY - sh / 2 + rise) * ms, w: sw * ms, h: sh * ms, fn: () => { S0.idx = k; S0.sk = 1; } });
   }
   ctx.restore();
   ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
@@ -3669,7 +3703,7 @@ const weaponPanel = (it, rx, rw, pa, A, g) => {
     ctx.restore();
 };
 const INFO = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
-const resetPicker = st => { st.idx = 0; st.p = 0; st.selT = 0; st.prev = 0; st.out = null; };
+const resetPicker = st => { st.idx = 0; st.p = 0; st.selT = 0; st.prev = 0; st.out = null; st.sI = null; st.sf = 0; st.sk = 0; };
 const drawInfo = t => drawPicker(t, { st: INFO, N: WKEYS.length + 1, title: 'ARMAS', liftIcon: true, auraK: 1.5, floorK: .5, hero: weaponHero, panel: weaponPanel,
   hint: 'Roda do mouse, setas ← → ou clique trocam de arma | Esc volta', hintT: 'Toque nos retângulos para trocar de arma',
   accent: it => WEAPONS[WKEYS[it - 1]].accent,
@@ -3807,6 +3841,11 @@ function drawChars(t) {
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO lista tudo. */
 const UPDATES = [
+  { n: 104, v: '0.53.2', title: 'Sons nas telas ARMAS e PERSONAGENS',
+    criado: [
+      'Som de tique ao rolar a barra de seleção das telas ARMAS e PERSONAGENS (roda do mouse e setas do teclado): mais agudo ao avançar e mais grave ao voltar.',
+      'Sons na hora em que a arma ou o personagem escolhido aparece, no ritmo da animação: a luz caindo, a peça subindo (saque metálico para a arma, pancada surda para o personagem), o encaixe no lugar e as estatísticas surgindo.',
+    ] },
   { n: 103, v: '0.53.1', title: 'Tela OPÇÕES organizada como a ATUALIZAÇÃO',
     modificado: [
       'A tela OPÇÕES agora segue o mesmo jeito da ATUALIZAÇÃO: uma coluna central rolável para baixo, com um cartão para cada assunto (TECLADO, MOUSE E SISTEMA e ÁUDIO), cada um com a bolinha colorida e o título no topo, e o mesmo fundo dos outros cartões.',
