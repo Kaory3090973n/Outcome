@@ -5,11 +5,17 @@
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO mostra só a última. */
 const UPDATES = [
-  { n: 104, v: '0.53.2', title: 'Sons nas telas ARMAS e PERSONAGENS',
+  { n: 105, v: '0.54.0', title: 'Novo elenco: o DETETIVE',
     criado: [
-      'Som de tique ao rolar a barra de seleção das telas ARMAS e PERSONAGENS (roda do mouse e setas do teclado): mais agudo ao avançar e mais grave ao voltar.',
-      'Sons na hora em que a arma ou o personagem escolhido aparece, no ritmo da animação: a luz caindo, a peça subindo (saque metálico para a arma, pancada surda para o personagem), o encaixe no lugar e as estatísticas surgindo.',
-    ] },
+      'Personagem DETETIVE ("O HOMEM DO CIGARRO"), ATIRADOR CALCULISTA: mira firme (controle 8) e recarga rápida (7), força baixa (4) e o resto na média. Ganhou biografia e atributos próprios.',
+      'Em partida o Detetive usa sprites: o corpo vira para as 8 direções da mira (frente, costas, lados e diagonais), desliza na pose "esquivando" e cai na pose "morrendo" quando nocauteado. Arma e braços continuam desenhados pelo jogo.',
+      'Anel colorido nos pés para saber quem é quem, já que todos usam o mesmo personagem: branco = você, verde = aliado, vermelho = inimigo.',
+      'Na tela PERSONAGENS aparece a foto grande do Detetive.',
+    ],
+    modificado: [
+      'Com um personagem só, no online todos podem escolher o Detetive ao mesmo tempo (antes cada personagem só podia ser escolhido por um jogador).',
+    ],
+    removido: ['Os 8 personagens antigos: Vargo, Nox, Kain, Viúva, Serra, Rocha, Lyra e Dente.'] },
 ];
 function wrapLines(text, maxW, size) {
   ctx.font = `bold ${size}px "Courier New", monospace`; const out = []; let line = '';

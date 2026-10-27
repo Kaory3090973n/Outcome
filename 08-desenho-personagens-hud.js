@@ -46,13 +46,14 @@ function drawArm(f, sx, sy, F, side, k = .52, hold = false, straight = false) { 
   const L = Math.max(10, d * k), h = straight ? 0 : Math.sqrt(Math.max(L * L - d * d / 4, 0));   // straight: sem dobra no cotovelo
   const ex = sx + dx / 2 + (-dy / d) * side * h, ey = sy + dy / 2 + (dx / d) * side * h;
   const seg = (ax, ay, bx, by, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); };
-  const W1 = straight ? 8.5 : 9.5, W2 = straight ? 6.5 : 7.5, W3 = straight ? 8.5 : 8, W4 = straight ? 6.5 : 6;   // braço reto: mesma grossura do ombro à mão (sem degrau que parece dobra)
+  const sl = !!f.pal.spr, kw = sl ? .78 : 1;   // personagem de capa: manga cobre o braço todo, só a mão aparece
+  const W1 = (straight ? 8.5 : 9.5) * kw, W2 = (straight ? 6.5 : 7.5) * kw, W3 = (straight ? 8.5 : 8) * kw, W4 = (straight ? 6.5 : 6) * kw;   // braço reto: mesma grossura do ombro à mão (sem degrau que parece dobra)
   seg(sx, sy, ex, ey, W1, (f.pal.bare ? f.pal.skinD : f.pal.jDark));
   const hp = handPath(F, Math.atan2(F.y - ey, F.x - ex), Math.max(F.ext || 0, 0), side, hold);
   // contorno só em volta do antebraço + mão juntos: primeiro tudo em tom escuro, depois o preenchimento por cima apaga a borda da emenda
-  seg(ex, ey, F.x, F.y, W3, f.pal.skinD); ctx.strokeStyle = f.pal.skinD; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.stroke(hp);
+  seg(ex, ey, F.x, F.y, W3, sl ? f.pal.jDark : f.pal.skinD); ctx.strokeStyle = f.pal.skinD; ctx.lineWidth = 2.6; ctx.lineJoin = 'round'; ctx.stroke(hp);
   seg(sx, sy, ex, ey, W2, (f.pal.bare ? f.pal.skin : f.pal.jacket));
-  seg(ex, ey, F.x, F.y, W4, f.pal.skin); ctx.fillStyle = f.pal.skin; ctx.fill(hp);
+  seg(ex, ey, F.x, F.y, W4, sl ? f.pal.jacket : f.pal.skin); ctx.fillStyle = f.pal.skin; ctx.fill(hp);
 }
 function handPath(F, a, ext, side, hold) {   // punho fechado visto de cima (como numa mão segurando um cabo): fino no pulso, mais largo nos dedos; o cano sai pela frente
   const k = 1 + ext * .22, c = Math.cos(a), s = Math.sin(a), P = new Path2D();
@@ -80,6 +81,7 @@ function drawStars(x, y, t) {
   }
 }
 function drawKnocked(f) {
+  if (f.pal.spr) { drawSprKnocked(f); return; }
   const ax = f.angle + Math.PI + f.fallDir * .5, t = menuT, pal = f.pal;
   ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(f.x + 3, f.y + 5, 34, 15, ax, 0, TAU); ctx.fill();
   ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(ax);
@@ -129,6 +131,7 @@ function drawThrown() {
 
 /* Rasteira: o personagem escorrega no chão, meio deitado de costas, uma perna esticada à frente e a outra dobrada, com poeira levantando atrás */
 function drawSlide(f) {
+  if (f.pal.spr) { drawSprSlide(f); return; }
   const pal = f.pal, sa = (f.slideDx || f.slideDy) ? Math.atan2(f.slideDy, f.slideDx) : Math.atan2(f.vy, f.vx), pr = 1 - clamp(f.slideT / SLIDE.dur, 0, 1);   // sem slideDx (convidado online) usa a velocidade
   ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(f.x + 3, f.y + 5, 36, 15, sa, 0, TAU); ctx.fill();
   ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(sa); if (lefty(f)) ctx.scale(1, -1); ctx.lineCap = 'round';
@@ -159,28 +162,68 @@ function drawSlide(f) {
   if (f.isPlayer && f.slideCd > 0 && !f.dead) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(f.x - 14, f.y + 26, 28, 3); ctx.fillStyle = 'rgba(231,228,211,.75)'; ctx.fillRect(f.x - 14, f.y + 26, 28 * (1 - f.slideCd / (f.slideCdMax || SLIDE.cd)), 3); }
   if (!f.isPlayer && f.hp < f.maxHp) { ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - 18, f.y - 32, 36, 6); ctx.fillStyle = '#ff3b5c'; ctx.fillRect(f.x - 17, f.y - 31, 34 * f.hp / f.maxHp, 4); }
 }
+/* ---- Personagem com sprites (Detetive): o corpo é a imagem da direção da mira (8 direções); arma e braços continuam desenhados pelo jogo ---- */
+const SPR_H = 56, SPR_FEET = 24;   // altura do sprite e distância dos pés ao centro do lutador (unidades do mundo)
+const sprOk = i => i.complete && i.naturalWidth > 0;
+function teamRing(f, rx, ry) {   // anel no chão: branco = você, verde = aliado, vermelho = inimigo
+  const me = typeof player !== 'undefined' && player;
+  const col = f.isPlayer ? 'rgba(231,228,211,.9)' : (me && f.team === me.team) ? 'rgba(61,220,132,.9)' : 'rgba(255,77,94,.9)';
+  ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(f.x, f.y + SPR_FEET, rx, ry, 0, 0, TAU); ctx.stroke(); ctx.restore();
+}
+function drawSprBody(f) {
+  const im = DETSPR.dir[((Math.round(f.angle / (Math.PI / 4)) % 8) + 8) % 8]; if (!sprOk(im)) return;
+  const sp = Math.min(Math.hypot(f.vx, f.vy) / C.moveSpeed, 1), ph = f.walk, W = im.naturalWidth * SPR_H / im.naturalHeight;
+  const bob = Math.abs(Math.sin(ph)) * 2.6 * sp, sx = 1 + Math.sin(ph * 2) * .025 * sp;
+  let ox = 0, oy = 0; if (f.cover) { ox = -f.cover.ny * f.leanS * f.peekK * 9; oy = f.cover.nx * f.leanS * f.peekK * 9; }
+  ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.beginPath(); ctx.ellipse(f.x + ox + 2, f.y + oy + SPR_FEET, 17, 6.5, 0, 0, TAU); ctx.fill();
+  teamRing(f, 19, 7.5);
+  ctx.save(); ctx.translate(f.x + ox, f.y + oy + SPR_FEET - bob); ctx.scale(sx, 1 / sx); ctx.drawImage(im, -W / 2, -SPR_H, W, SPR_H); ctx.restore();
+}
+function drawSprKnocked(f) {
+  const im = DETSPR.dead, t = menuT, dx = Math.cos(f.angle + Math.PI + f.fallDir * .5) >= 0 ? 1 : -1, w = DETSPR.deadWH[0] * SPR_H / 118 * 1.0, h = DETSPR.deadWH[1] * SPR_H / 118 * 1.0;
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(f.x + 2, f.y + 14, w * .5, 9, 0, 0, TAU); ctx.fill();
+  if (sprOk(im)) { ctx.save(); ctx.globalAlpha = f.stun < .5 ? .65 + .35 * Math.sin(t * 45) : 1; ctx.translate(f.x, f.y + 17); ctx.scale(dx, 1); ctx.drawImage(im, -w / 2, -h, w, h); ctx.restore(); }
+  if (f.hitFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${f.hitFlash * 5})`; ctx.beginPath(); ctx.ellipse(f.x, f.y + 4, w * .45, 13, 0, 0, TAU); ctx.fill(); }
+  drawStars(f.x, f.y - 16, t); teamRing(f, w * .5, 9);
+  ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - 19, f.y + 26, 38, 6);       // tempo de nocaute restante
+  ctx.fillStyle = '#e7e4d3'; ctx.fillRect(f.x - 18, f.y + 27, 36 * clamp(f.stun / f.stunMax, 0, 1), 4);
+  if (!f.isPlayer && f.hp < f.maxHp) { ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - 18, f.y - 32, 36, 6); ctx.fillStyle = '#ff3b5c'; ctx.fillRect(f.x - 17, f.y - 31, 34 * f.hp / f.maxHp, 4); }
+}
+function drawSprSlide(f) {
+  const im = DETSPR.slide, sa = (f.slideDx || f.slideDy) ? Math.atan2(f.slideDy, f.slideDx) : Math.atan2(f.vy, f.vx), dx = Math.cos(sa) >= 0 ? 1 : -1, w = DETSPR.slideWH[0] * SPR_H / 118, h = DETSPR.slideWH[1] * SPR_H / 118, fade = clamp(f.slideT / .2, 0, 1);
+  ctx.fillStyle = 'rgba(0,0,0,.4)'; ctx.beginPath(); ctx.ellipse(f.x + 2, f.y + 18, w * .5, 8, 0, 0, TAU); ctx.fill();
+  for (let i = 0; i < 7; i++) {   // poeira levantada pelo atrito com o chão (atrás de quem desliza)
+    const u = i / 6, a = .26 * (1 - u) * fade; if (a <= .01) continue;
+    ctx.fillStyle = `rgba(150,140,125,${a})`; ctx.beginPath(); ctx.arc(f.x - Math.cos(sa) * (24 + u * 62), f.y + 14 - Math.sin(sa) * (24 + u * 62) * .5 + Math.sin(i * 2.7 + f.slideT * 9) * (3 + u * 6), 5 + u * 11, 0, TAU); ctx.fill();
+  }
+  if (sprOk(im)) { ctx.save(); ctx.translate(f.x, f.y + 20); ctx.scale(dx, 1); ctx.drawImage(im, -w / 2, -h, w, h); ctx.restore(); }
+  teamRing(f, w * .5, 8);
+  if (f.isPlayer && f.slideCd > 0 && !f.dead) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(f.x - 14, f.y + 30, 28, 3); ctx.fillStyle = 'rgba(231,228,211,.75)'; ctx.fillRect(f.x - 14, f.y + 30, 28 * (1 - f.slideCd / (f.slideCdMax || SLIDE.cd)), 3); }
+  if (!f.isPlayer && f.hp < f.maxHp) { ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - 18, f.y - 32, 36, 6); ctx.fillStyle = '#ff3b5c'; ctx.fillRect(f.x - 17, f.y - 31, 34 * f.hp / f.maxHp, 4); }
+}
 function drawFighter(f) {
   if (f.stun > 0) { drawKnocked(f); return; }
   if (f.slideT > 0) { drawSlide(f); return; }   // rasteira
-  ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.beginPath(); ctx.ellipse(f.x + 4, f.y + 6, 20, 17, f.angle, 0, TAU); ctx.fill();
+  const SP = !!f.pal.spr;   // personagem de sprite: corpo e cabeça vêm da imagem
+  if (SP) drawSprBody(f); else { ctx.fillStyle = 'rgba(0,0,0,.38)'; ctx.beginPath(); ctx.ellipse(f.x + 4, f.y + 6, 20, 17, f.angle, 0, TAU); ctx.fill(); }
   ctx.save(); ctx.translate(f.x, f.y); if (f.cover) ctx.translate(-f.cover.ny * f.leanS * f.peekK * 9, f.cover.nx * f.leanS * f.peekK * 9); ctx.rotate(f.angle); if (f.cover) { const q = 1 - .1 * (1 - f.peekK); ctx.scale(q, q); }
   const sp = Math.min(Math.hypot(f.vx, f.vy) / C.moveSpeed, 1), ph = f.walk;
   const d = f.cover ? angDiff(Math.atan2(f.cover.ny, f.cover.nx), f.angle) * (1 - f.peekK) : 0;   // corpo de costas para a parede
   ctx.save(); ctx.rotate(d);
 
   // Pés: passos largos, o pé da frente "pisa" e o de trás levanta
-  for (const s of [-1, 1]) {
+  if (!SP) for (const s of [-1, 1]) {
     const a = ph + (s > 0 ? Math.PI : 0), step = Math.sin(a) * 12 * sp, up = Math.max(0, Math.cos(a)) * sp;
     ctx.fillStyle = '#0c0a14'; ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(step - 1, s * 7.5, 7 + up * 1.8, 4.2 + up * .8, 0, 0, TAU); ctx.fill(); ctx.stroke();
   }
 
   // Tronco: balança com a passada e gira ao socar
-  ctx.save(); ctx.rotate(f.twist + Math.sin(ph) * .16 * sp); ctx.scale(1 + Math.abs(Math.sin(ph)) * .05 * sp, 1);
+  if (!SP) { ctx.save(); ctx.rotate(f.twist + Math.sin(ph) * .16 * sp); ctx.scale(1 + Math.abs(Math.sin(ph)) * .05 * sp, 1);
   ctx.fillStyle = f.pal.jacket; ctx.strokeStyle = f.pal.jDark; ctx.lineWidth = 2.5;
   ctx.beginPath(); ctx.ellipse(-1, 0, 9, 17.5, 0, 0, TAU); ctx.fill(); ctx.stroke();
   ctx.fillStyle = f.pal.stripe; ctx.fillRect(-4, -17, 2.5, 34); drawPads(f.pal);
-  ctx.restore(); ctx.restore();
+  ctx.restore(); } ctx.restore();
 
   // Arma + braços
   const ct = Math.cos(f.twist), sn = Math.sin(f.twist);
@@ -200,10 +243,10 @@ function drawFighter(f) {
     const [lx, ly] = shoulder(-1), [rx, ry] = shoulder(1);
     if (w.melee) { const mk = .52 - .02 * clamp(me, 0, 1), st = me > .8; drawArm(f, lx, ly, gp(L ? w.gripR : w.gripL), -1, mk, true, st); drawArm(f, rx, ry, gp(L ? w.gripL : w.gripR), 1, mk, true, st); }
     else if (L) {
-      drawArm(f, rx, ry, fistLocal(f, 'right'), 1);       // mão direita (não dominante) solta ao lado do corpo
+      if (!SP || f.punch.right.t >= 0) drawArm(f, rx, ry, fistLocal(f, 'right'), 1);       // mão direita (não dominante) solta ao lado do corpo (no sprite a mão solta já faz parte da imagem)
       drawArm(f, lx, ly, gp(w.gripR), -1, .5, true, true);   // braço esquerdo esticado, segurando e apontando a arma
     } else {
-      drawArm(f, lx, ly, fistLocal(f, 'left'), -1);       // mão esquerda solta ao lado do corpo
+      if (!SP || f.punch.left.t >= 0) drawArm(f, lx, ly, fistLocal(f, 'left'), -1);       // mão esquerda solta ao lado do corpo
       drawArm(f, rx, ry, gp(w.gripR), 1, .5, true, true);           // braço direito esticado (reto de verdade), saindo do ombro e segurando a arma
     }
     if (f.flash > 0 && !w.melee) {  // Clarão do disparo (menor com silenciador)
@@ -214,7 +257,7 @@ function drawFighter(f) {
     }
   } else {
     const order = f.punch.left.t >= 0 && f.punch.right.t < 0 ? ['right', 'left'] : ['left', 'right'];
-    for (const hand of order) { const s = hand === 'left' ? -1 : 1, [sx, sy] = shoulder(s), F = fistLocal(f, hand); drawArm(f, sx, sy, F, s);
+    for (const hand of order) { if (SP && f.punch[hand].t < 0) continue; const s = hand === 'left' ? -1 : 1, [sx, sy] = shoulder(s), F = fistLocal(f, hand); drawArm(f, sx, sy, F, s);
       if (f.weapon && WEAPONS[f.weapon].knuckle && hand === domHand(f)) {   // soco-inglês: latão nos nós dos dedos (só na mão dominante)
         const a = Math.atan2(F.y - sy, F.x - sx), k = 1 + Math.max(F.ext || 0, 0) * .22;
         ctx.save(); ctx.translate(F.x, F.y); ctx.rotate(a); ctx.scale(k, k); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(0,0,0,.85)';
@@ -226,9 +269,9 @@ function drawFighter(f) {
 
   ctx.restore();
   // Cabeça (com leve balanço)
-  ctx.save(); ctx.rotate(d + f.twist * .45); ctx.translate(1 + Math.sin(ph * 2) * .8 * sp, 0);
+  if (!SP) { ctx.save(); ctx.rotate(d + f.twist * .45); ctx.translate(1 + Math.sin(ph * 2) * .8 * sp, 0);
   drawHeadTop(f.pal);
-  ctx.restore(); ctx.restore();
+  ctx.restore(); } ctx.restore();
 
   if (f.isPlayer && f.slideCd > 0 && !f.dead) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(f.x - 14, f.y + 26, 28, 3); ctx.fillStyle = 'rgba(231,228,211,.75)'; ctx.fillRect(f.x - 14, f.y + 26, 28 * (1 - f.slideCd / (f.slideCdMax || SLIDE.cd)), 3); }   // recarga do deslize
   if (f.hitFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${f.hitFlash * 5})`; ctx.beginPath(); ctx.arc(f.x, f.y, 17, 0, TAU); ctx.fill(); }

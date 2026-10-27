@@ -246,6 +246,7 @@ const bP = (pts, f, st, lw = 2) => { ctx.beginPath(); pts.forEach(([x, y], i) =>
 const bL = (pts, c, lw) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.strokeStyle = c; ctx.lineWidth = lw; ctx.stroke(); };
 /* Busto de frente, da cintura para cima. Origem: centro da cintura (y negativo = para cima) */
 function drawBust(P) {
+  if (P.spr) { const im = DETSPR.portrait; if (im.complete && im.naturalWidth) { const h = 275, w = h * im.naturalWidth / im.naturalHeight; ctx.drawImage(im, -w / 2, -h + 12, w, h); } return; }   // personagem com foto: desenha a foto grande no lugar do busto
   const b = P.bulk || 1, sk = P.skin, K = 'rgba(0,0,0,.78)', id = P.id, R = [-1, 1];
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.save(); ctx.scale(b, 1);
@@ -312,11 +313,12 @@ function drawBust(P) {
    O busto é desenhado uma vez numa tela escondida (trocando o ctx por um instante) e guardado em P._img. */
 const BK = 1.5, BW = 560, BH = 420, BY = 390;   // escala da captura, tamanho da tela escondida e linha da cintura (em pixels da captura)
 function makeCharImg(P) {
+  if (P.spr && !(DETSPR.portrait.complete && DETSPR.portrait.naturalWidth)) return;   // foto ainda carregando: tenta de novo no próximo quadro
   const c = document.createElement('canvas'); c.width = BW; c.height = BH;
   const real = ctx; ctx = c.getContext('2d');
   try { ctx.save(); ctx.translate(BW / 2, BY); ctx.scale(BK, BK); drawBust(P); ctx.restore(); } finally { ctx = real; }
-  const x = c.getContext('2d'), d = x.getImageData(0, 0, BW, BH), px = d.data, fade = 50 * BK;
-  for (let yy = 0; yy < BH; yy++) {
+  const x = c.getContext('2d'), d = x.getImageData(0, 0, BW, BH), px = d.data, fade = P.spr ? 0 : 50 * BK;   // a foto do corpo inteiro não esmaece na cintura
+  for (let yy = 0; yy < BH && fade; yy++) {
     const m = yy >= BY ? 0 : yy > BY - fade ? (BY - yy) / fade : 1;
     for (let xx = 0; xx < BW; xx++) { const i = (yy * BW + xx) * 4 + 3; px[i] = px[i] * m; }
   }
@@ -326,7 +328,7 @@ function makeCharImg(P) {
   P._img = { c, w };
 }
 /* desenha o busto com a cintura em (x, base) e a escala s (1 = tamanho natural do desenho) */
-const bustAt = (P, which, x, base, s, alpha) => { if (alpha <= 0) return; const k = s / BK; ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(P._img[which], x - BW / 2 * k, base - BY * k, BW * k, BH * k); ctx.restore(); };
+const bustAt = (P, which, x, base, s, alpha) => { if (alpha <= 0 || !P._img) return; const k = s / BK; ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(P._img[which], x - BW / 2 * k, base - BY * k, BW * k, BH * k); ctx.restore(); };
 const BUST_H = 255;   // altura do busto (da cintura ao topo da cabeça), em unidades do desenho
 const charHero = (it, px, py, up, g, A, ac) => {
   const P = CHARS[it - 1], sF = Math.min(g.bot - g.top - 30, g.R * 1.75) / BUST_H, sS = g.sh * .8 / BUST_H, s = sS + (sF - sS) * up;

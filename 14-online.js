@@ -133,8 +133,8 @@ function selVote(id, v) { const s = NET.sel; if (!s || s.ph !== 'map' || !s.ids.
 function selPick(id, c) {   // 1º clique marca, 2º clique no mesmo confirma; personagem confirmado fica bloqueado para os outros
   const s = NET.sel; if (!s || s.ph !== 'char' || !s.ids.includes(id) || s.conf[id] !== undefined) return;
   c |= 0; if (c < -1 || c >= CHARS.length) return;
-  if (c >= 0 && Object.values(s.conf).includes(c)) return;
-  if (s.marks[id] === c) { s.conf[id] = c; delete s.marks[id]; if (c >= 0) for (const k in s.marks) if (s.marks[k] === c) delete s.marks[k]; }
+  if (c >= 0 && CHARS.length > 1 && Object.values(s.conf).includes(c)) return;   // com um só personagem todos podem repetir
+  if (s.marks[id] === c) { s.conf[id] = c; delete s.marks[id]; if (c >= 0 && CHARS.length > 1) for (const k in s.marks) if (s.marks[k] === c) delete s.marks[k]; }
   else s.marks[id] = c;
   selSync();
 }
@@ -152,7 +152,7 @@ function selMapDone() {   // maioria decide; sem votos ou ALEATÓRIO na frente =
 }
 function selCharDone() {   // acabou o tempo (ou todos confirmaram): o marcado vale; sem marca livre vira aleatório
   const s = NET.sel;
-  for (const id of s.ids) if (s.conf[id] === undefined) { const m = s.marks[id]; s.conf[id] = m >= 0 && !Object.values(s.conf).includes(m) ? m : -1; }
+  for (const id of s.ids) if (s.conf[id] === undefined) { const m = s.marks[id]; s.conf[id] = m >= 0 && (CHARS.length < 2 || !Object.values(s.conf).includes(m)) ? m : -1; }
   s.marks = {}; rollNext();
 }
 function rollNext() {   // sorteia, um de cada vez, quem pediu ALEATÓRIO
@@ -217,7 +217,7 @@ function drawPick(t) {
   };
   const RI = MAPS.length, GS = mapPh ? MSLOTS : SLOTS;
   const voters = (i, x, y) => s.ids.filter(id => s.votes[id] === i).slice(0, 8).forEach((id, j) => { ctx.beginPath(); ctx.arc(x + j * 13, y, 5.5, 0, TAU); ctx.fillStyle = pcol(id); ctx.fill(); if (id === me) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke(); } });
-  const canMe = mapPh ? s.ph === 'map' : s.ph === 'char' && s.conf[me] === undefined, takenBy = c => c >= 0 ? s.ids.find(id => s.conf[id] === c) : undefined;
+  const canMe = mapPh ? s.ph === 'map' : s.ph === 'char' && s.conf[me] === undefined, takenBy = c => c >= 0 && CHARS.length > 1 ? s.ids.find(id => s.conf[id] === c) : undefined;
   let hovC = -2; if (canMe) GS.forEach((c, q) => { const o = tpos(q); if (c >= 0 && takenBy(c) === undefined && over(o.x, o.y, T, TH)) hovC = c; });
   const myP = NET.players.find(p => p.id === me), teamRoom = NET.snap && NET.snap.team > 0 && myP && myP.team >= 0;
   const rank = id => id === me ? 0 : teamRoom && (NET.players.find(p => p.id === id) || {}).team === myP.team ? 1 : 2, ord = [...s.ids].sort((a, b) => rank(a) - rank(b)), nn = Math.max(1, ord.length);

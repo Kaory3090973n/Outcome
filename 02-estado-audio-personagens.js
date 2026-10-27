@@ -275,32 +275,11 @@ const BTRAIL_LIFE = .45;   // tempo (s) que cada ponto do rastro da bala leva pa
 const MAPK = 2.2, cam = { x: 0, y: 0 };   // mapa = MAPK x a área visível; cam = canto superior esquerdo da câmera (em unidades do mundo)
 const input = { keys: {}, mx: 0, my: 0, down: false, buffer: 0, reloadReq: false, interact: false, throwReq: false, coverReq: false, slideReq: false, holsterReq: false, peek: false };
 const CHARS = [
-  { id: 'vargo', name: 'VARGO', alias: 'O AÇOUGUEIRO', skin: '#c58a63', skinD: '#8c5a3a', jacket: '#1a1a1f', jDark: '#08080a', stripe: '#34343c', hair: '#1a1a1a', beard: '#2a1f1a', accent: '#c0392b', bare: true, bulk: 1.14, head: 'bald', pads: null,
-    style: 'TANQUE BRUTAL', st: { spd: 3, agi: 3, hp: 8, tgh: 8, str: 9, aim: 2, rel: 3 },
-    bio: 'Ex-lutador de rinha que nunca perdeu uma luta e nunca soltou uma garganta. A cicatriz no olho é de quem tentou. Ele não fala. Ele aperta.' },
-  { id: 'nox', name: 'NOX', alias: 'O SEM-ROSTO', skin: '#b98a6c', skinD: '#7d563f', jacket: '#26262e', jDark: '#0b0b10', stripe: '#a01f2d', hair: '#1b1b24', accent: '#ff2b2b', glove: '#0d0d11', head: 'hood', pads: null,
-    style: 'ASSASSINO FANTASMA', st: { spd: 7, agi: 8, hp: 3, tgh: 3, str: 5, aim: 7, rel: 3 },
-    bio: 'Ninguém viu o rosto de Nox e sobreviveu para descrever. Só os olhos vermelhos entre o capuz e a máscara. Chega calado, sai calado, e a cidade amanhece com menos gente.' },
-  { id: 'kain', name: 'KAIN', alias: 'CRISTA DE SANGUE', skin: '#e3c1a8', skinD: '#a8806a', jacket: '#2b1a14', jDark: '#120a08', stripe: '#c9ccd4', hair: '#e0201f', accent: '#e0201f', bare: true, head: 'mohawk', pads: 'spikes',
-    style: 'BRIGÃO DE BECO', st: { spd: 6, agi: 6, hp: 5, tgh: 6, str: 7, aim: 3, rel: 3 },
-    bio: 'Cresceu brigando por comida em beco e aprendeu a rir quando machuca. O moicano vermelho não é moda, é aviso. Cobra cada soco com juros.' },
-  { id: 'viuva', name: 'VIÚVA', alias: 'A VIÚVA NEGRA DO PORTO', skin: '#e7c9b2', skinD: '#a77f69', jacket: '#5a0f1e', jDark: '#240509', stripe: '#c9a227', hair: '#0e0b0f', accent: '#d4264a', glove: '#111116', head: 'slick', pads: null,
-    style: 'ATIRADORA PACIENTE', st: { spd: 4, agi: 4, hp: 4, tgh: 4, str: 4, aim: 9, rel: 7 },
-    bio: 'Dizem que enterrou três maridos e um sócio. Usa o tapa-olho para lembrar quem o tirou. Fria, paciente e sem pressa nenhuma de perdoar.' },
-  { id: 'serra', name: 'SERRA', alias: 'O SOLDADO SEM GUERRA', skin: '#a07656', skinD: '#6e4d36', jacket: '#4a5233', jDark: '#1f2414', stripe: '#8b8f6a', hair: '#3a4228', accent: '#7fe0d0', glove: '#1c1f16', head: 'gas', pads: 'plates',
-    style: 'SOLDADO METÓDICO', st: { spd: 3, agi: 3, hp: 6, tgh: 6, str: 4, aim: 8, rel: 6 },
-    bio: 'Ex-soldado de uma guerra que ninguém assume. A máscara de gás nunca sai do rosto, nem para dormir. Respira fundo, mira devagar e não deixa testemunha.' },
-  // --- personagens provisórios (arte simples, podem ser refeitos depois)
-  { id: 'rocha', name: 'ROCHA', alias: 'O MURO DO CAIS', skin: '#8a5a3c', skinD: '#5c3a26', jacket: '#3a2f2a', jDark: '#171210', stripe: '#e0a030', hair: '#161210', beard: '#1a1410', accent: '#e0a030', glove: '#1a1410', bulk: 1.2, head: 'bald', pads: 'plates',
-    style: 'MURO LENTO', st: { spd: 2, agi: 2, hp: 10, tgh: 10, str: 7, aim: 3, rel: 2 },
-    bio: 'Carregou container por vinte anos antes de descobrir que dava mais dinheiro derrubar gente. Lento para falar, mais lento ainda para cair. Quem tenta passar por ele para no primeiro soco.' },
-  { id: 'lyra', name: 'LYRA', alias: 'A RELÂMPAGO', skin: '#a8714f', skinD: '#6f4630', jacket: '#122a3a', jDark: '#07131c', stripe: '#27c4ff', hair: '#2de2e6', accent: '#27c4ff', glove: '#0b1c28', head: 'slick', pads: null,
-    style: 'VELOCISTA FRÁGIL', st: { spd: 10, agi: 9, hp: 2, tgh: 2, str: 3, aim: 4, rel: 6 },
-    bio: 'Corredora de rua que trocou as ruas pelas rinhas. Rápida demais para ser acertada, nervosa demais para parar. Sempre sai antes do trovão chegar.' },
-  { id: 'dente', name: 'DENTE', alias: 'O PALHAÇO DA DOCA', skin: '#d7b59a', skinD: '#a07c62', jacket: '#3a1d4d', jDark: '#170a20', stripe: '#3ddc84', hair: '#3ddc84', accent: '#3ddc84', bare: true, head: 'mohawk', hand: 'L', pads: null,
-    style: 'CAÓTICO IMPREVISÍVEL', st: { spd: 7, agi: 7, hp: 4, tgh: 5, str: 6, aim: 2, rel: 5 },
-    bio: 'Ri o tempo todo, principalmente quando não deveria. Dizem que perdeu metade dos dentes brigando e a outra metade rindo. Ninguém sabe se é maluco ou só gosta de parecer.' },
+  { id: 'detetive', name: 'DETETIVE', alias: 'O HOMEM DO CIGARRO', spr: true, skin: '#e8b48a', skinD: '#b07e58', jacket: '#26262e', jDark: '#0b0b10', stripe: '#26262e', hair: '#14141a', accent: '#e8a33d', glove: '#14141a', head: 'fedora', pads: null,
+    style: 'ATIRADOR CALCULISTA', st: { spd: 5, agi: 6, hp: 5, tgh: 5, str: 4, aim: 8, rel: 7 },
+    bio: 'Trabalha sozinho, de capa e chapéu, com um cigarro sempre aceso e a pistola sempre carregada. Fala pouco, observa tudo e só puxa o gatilho depois de ter certeza. Quando a cidade vira um caso sem solução, é para ele que ligam.' },
 ];
+if (!(cfg.char >= 0 && cfg.char < CHARS.length)) cfg.char = 0;   // config antiga com personagem que não existe mais
 /* ATRIBUTOS DOS PERSONAGENS: cada personagem tem uma nota de 1 a 10 em cada atributo (st). A MESMA tabela vale para o jogo (m = multiplicador)
    e para a tela PERSONAGENS (barra = nota, texto = efeito real). Nota 5 = igual ao padrão. */
 const sgn = v => (v < 0 ? '-' : '+') + Math.abs(Math.round(v * 100)) + '%';
