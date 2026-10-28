@@ -5,17 +5,10 @@
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
    O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO mostra só a última. */
 const UPDATES = [
-  { n: 105, v: '0.54.0', title: 'Novo elenco: o DETETIVE',
-    criado: [
-      'Personagem DETETIVE ("O HOMEM DO CIGARRO"), ATIRADOR CALCULISTA: mira firme (controle 8) e recarga rápida (7), força baixa (4) e o resto na média. Ganhou biografia e atributos próprios.',
-      'Em partida o Detetive usa sprites: o corpo vira para as 8 direções da mira (frente, costas, lados e diagonais), desliza na pose "esquivando" e cai na pose "morrendo" quando nocauteado. Arma e braços continuam desenhados pelo jogo.',
-      'Anel colorido nos pés para saber quem é quem, já que todos usam o mesmo personagem: branco = você, verde = aliado, vermelho = inimigo.',
-      'Na tela PERSONAGENS aparece a foto grande do Detetive.',
-    ],
+  { n: 106, v: '0.54.1', title: 'Detetive com 16 direções',
     modificado: [
-      'Com um personagem só, no online todos podem escolher o Detetive ao mesmo tempo (antes cada personagem só podia ser escolhido por um jogador).',
-    ],
-    removido: ['Os 8 personagens antigos: Vargo, Nox, Kain, Viúva, Serra, Rocha, Lyra e Dente.'] },
+      'O corpo do Detetive agora tem 16 direções (de 22,5° em 22,5°) em vez de 8, então a virada ao mirar fica bem mais suave.',
+    ] },
 ];
 function wrapLines(text, maxW, size) {
   ctx.font = `bold ${size}px "Courier New", monospace`; const out = []; let line = '';

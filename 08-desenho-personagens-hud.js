@@ -162,7 +162,7 @@ function drawSlide(f) {
   if (f.isPlayer && f.slideCd > 0 && !f.dead) { ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(f.x - 14, f.y + 26, 28, 3); ctx.fillStyle = 'rgba(231,228,211,.75)'; ctx.fillRect(f.x - 14, f.y + 26, 28 * (1 - f.slideCd / (f.slideCdMax || SLIDE.cd)), 3); }
   if (!f.isPlayer && f.hp < f.maxHp) { ctx.fillStyle = 'rgba(0,0,0,.7)'; ctx.fillRect(f.x - 18, f.y - 32, 36, 6); ctx.fillStyle = '#ff3b5c'; ctx.fillRect(f.x - 17, f.y - 31, 34 * f.hp / f.maxHp, 4); }
 }
-/* ---- Personagem com sprites (Detetive): o corpo é a imagem da direção da mira (8 direções); arma e braços continuam desenhados pelo jogo ---- */
+/* ---- Personagem com sprites (Detetive): o corpo é a imagem da direção da mira (16 direções); arma e braços continuam desenhados pelo jogo ---- */
 const SPR_H = 56, SPR_FEET = 24;   // altura do sprite e distância dos pés ao centro do lutador (unidades do mundo)
 const sprOk = i => i.complete && i.naturalWidth > 0;
 function teamRing(f, rx, ry) {   // anel no chão: branco = você, verde = aliado, vermelho = inimigo
@@ -171,7 +171,7 @@ function teamRing(f, rx, ry) {   // anel no chão: branco = você, verde = aliad
   ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(f.x, f.y + SPR_FEET, rx, ry, 0, 0, TAU); ctx.stroke(); ctx.restore();
 }
 function drawSprBody(f) {
-  const im = DETSPR.dir[((Math.round(f.angle / (Math.PI / 4)) % 8) + 8) % 8]; if (!sprOk(im)) return;
+  const im = DETSPR.dir[((Math.round(f.angle / (Math.PI / 8)) % 16) + 16) % 16]; if (!sprOk(im)) return;
   const sp = Math.min(Math.hypot(f.vx, f.vy) / C.moveSpeed, 1), ph = f.walk, W = im.naturalWidth * SPR_H / im.naturalHeight;
   const bob = Math.abs(Math.sin(ph)) * 2.6 * sp, sx = 1 + Math.sin(ph * 2) * .025 * sp;
   let ox = 0, oy = 0; if (f.cover) { ox = -f.cover.ny * f.leanS * f.peekK * 9; oy = f.cover.nx * f.leanS * f.peekK * 9; }
