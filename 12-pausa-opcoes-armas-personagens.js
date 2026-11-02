@@ -285,7 +285,7 @@ function drawStats(t) {
   const A = [['PARTIDAS JOGADAS', String(S.games)], ['VITÓRIAS / DERROTAS', S.wins + ' / ' + S.losses], ['TAXA DE VITÓRIA', wr + '%', wr / 100], ['INIMIGOS ELIMINADOS', String(S.kills)], ['PRECISÃO DE TIRO', ac + '%', ac / 100]];
   const B = [['TEMPO TOTAL DE JOGO', hm(S.time)], ['MAIOR SOBREVIVÊNCIA', ms2(S.bestSurv)], ['PONTUAÇÃO MÁXIMA', String(S.hi)],
     ['ARMA MAIS UTILIZADA', wk && WEAPONS[wk] ? WEAPONS[wk].model : '—'], ['PERSONAGEM FAVORITO', ck != null && CHARS[ck] ? CHARS[ck].name : '—']];
-  const colW = Math.min(W * .44, 300), xL = cx - colW - 14, xR = cx + 14, top = 108, step = clamp((H - top - 90) / 5, 38, 56);
+  const colW = Math.min(W * .44, 300), xL = cx - colW - 14, xR = cx + 14, step = clamp((H - 200) / 5, 38, 56), top = Math.max(122, (H - (4 * step + 52)) / 2 + 22);   // bloco no centro da tela
   const col = (x, title, rows, d) => {
     ctx.globalAlpha = ent(.2 + d); txt(title, x, top - 22, 13, MUTE, 'left');
     ctx.strokeStyle = 'rgba(231,228,211,.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, top - 10.5); ctx.lineTo(x + colW, top - 10.5); ctx.stroke();

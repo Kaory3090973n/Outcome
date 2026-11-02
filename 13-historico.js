@@ -3,12 +3,20 @@
    Versão 0.MEIO.ÚLTIMO: atualização com recurso/mecânica nova sobe o do meio e zera o último (0.4.0 -> 0.5.0);
    atualização só de correção ou ajuste pequeno sobe o último (0.4.0 -> 0.4.1). A atualização 1 foi a 0.1.0.
    Só inclua as chaves criado/modificado/removido que tiverem itens (nunca escreva "nada foi ..."; a tela omite o que não existe).
-   O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela ATUALIZAÇÃO mostra só a última. */
+   O lobby mostra só UPDATES[0].v (o número, sem "BETA") no canto inferior direito e a tela REGISTROS mostra só a última. */
 const UPDATES = [
-  { n: 106, v: '0.54.1', title: 'Detetive com 16 direções',
+  { n: 106, v: '0.55.0', title: 'Dados do jogador, Arquivos e novos sons',
+    criado: [
+      'Tela DADOS com as suas estatísticas: partidas jogadas, vitórias e derrotas, taxa de vitória, inimigos eliminados, precisão de tiro, tempo total de jogo, maior sobrevivência, pontuação máxima, arma mais utilizada e personagem favorito. Os números ficam salvos neste aparelho.',
+      'Tela ARQUIVOS com três botões: ARMAS, PERSONAGENS e EM BREVE.',
+      'Novo som ao clicar no chapéu da abertura: tambor de revólver girando, sopro de ar e trava pesada.',
+    ],
     modificado: [
-      'O corpo do Detetive agora tem 16 direções (de 22,5° em 22,5°) em vez de 8, então a virada ao mirar fica bem mais suave.',
-    ] },
+      'Botões do menu: ARMAS virou ARQUIVOS, PERSONAGENS virou DADOS e ATUALIZAÇÃO virou REGISTROS.',
+      'Sons dos botões: o clique e o passar do mouse agora lembram teclado mecânico, e o tom muda de um botão para outro.',
+      'As telas ARMAS e PERSONAGENS (com a barra de retângulos) agora abrem de dentro de ARQUIVOS.',
+    ],
+    removido: ['Balão de ajuda que aparecia ao passar o mouse nos botões do menu.'] },
 ];
 function wrapLines(text, maxW, size) {
   ctx.font = `bold ${size}px "Courier New", monospace`; const out = []; let line = '';
@@ -34,12 +42,12 @@ function drawLog(t) {
     }
     y += pad - 8; cards.push({ y: y1, h: y - y1 }); y += 16;
   }
-  const maxS = Math.max(0, y - (bot - top)); logScroll = clamp(logScroll, 0, maxS);
-  scrHead('ATUALIZAÇÃO', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
-  ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, bot - top); ctx.clip(); ctx.translate(0, top - logScroll);
+  const maxS = Math.max(0, y - (bot - top)); logScroll = clamp(logScroll, 0, maxS); const cOff = y < bot - top ? (bot - top - y) / 2 : 0;   // conteúdo curto: fica no centro da tela
+  scrHead('REGISTROS', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent); ctx.globalAlpha = ent(.2);   // o resto da tela aparece em seguida
+  ctx.save(); ctx.beginPath(); ctx.rect(0, top, W, bot - top); ctx.clip(); ctx.translate(0, top - logScroll + cOff);
   for (const c of cards) { ctx.beginPath(); ctx.roundRect(x0 + .5, c.y + .5, colW - 1, c.h - 1, 18); const gr = ctx.createLinearGradient(0, c.y, 0, c.y + c.h); gr.addColorStop(0, 'rgba(255,255,255,.05)'); gr.addColorStop(1, 'rgba(255,255,255,.012)'); ctx.fillStyle = gr; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = 1; ctx.stroke(); }   // mesmo fundo dos cartões 1v1..4v4
   for (const o of ops) {
-    if (o.k === 'head') { txt('Atualização ' + o.u.n, x0 + pad, o.y + 12, 18, '#e7e4d3', 'left'); txt('v' + o.u.v, x0 + colW - pad, o.y + 12, 13, '#8a8a96', 'right'); txt(o.u.title, x0 + pad, o.y + 38, 13, '#8a8a96', 'left'); }
+    if (o.k === 'head') { txt('Registro ' + o.u.n, x0 + pad, o.y + 12, 18, '#e7e4d3', 'left'); txt('v' + o.u.v, x0 + colW - pad, o.y + 12, 13, '#8a8a96', 'right'); txt(o.u.title, x0 + pad, o.y + 38, 13, '#8a8a96', 'left'); }
     else if (o.k === 'label') { ctx.beginPath(); ctx.roundRect(x0 + pad, o.y + 3, 8, 8, 4); ctx.fillStyle = o.col; ctx.fill(); txt(o.label, x0 + pad + 16, o.y + 8, 11, o.col, 'left'); }
     else o.ls.forEach((l, i) => { if (i === 0) txt('•', x0 + pad, o.y + 8, FS, o.col, 'left'); txt(l, x0 + pad + 16, o.y + 8 + i * LH, FS, 'rgba(231,228,211,.85)', 'left'); });
   }
