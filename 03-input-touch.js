@@ -23,13 +23,13 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.code === 'Enter' && state === 'play' && TUT) tutSkip();   // pula o passo do tutorial
-  if (e.code === 'Escape') { if (state === 'play') setState('pause'); else if (state === 'pause') setState('play'); else if (state === 'options') setState(optBack); else if (state !== 'menu') setState('menu'); }   // Esc: pausa / continua / volta
+  if (e.code === 'Escape') { if (state === 'play') setState('pause'); else if (state === 'pause') setState('play'); else if (state === 'options') setState(optBack); else if (state === 'info' && ARQ === 1) ARQ = 0; else if (state === 'chars' && !DADOS) { ARQ = 0; setState('info'); } else if (state !== 'menu') setState('menu'); }   // Esc: pausa / continua / volta
   if (e.code === 'Enter') { if (state === 'menu') setState('modes'); else if (state === 'maps') { saveCfg(); setState('setup'); } else if (state === 'setup') startSetup(); else if (state === 'mend') startMatch(); else if (state === 'dead') startGame(training); else if (state === 'tutend') setState('modes'); }
   if (state === 'log') { if (e.code === 'ArrowDown' || e.code === 'PageDown') logScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') logScroll -= 70; }
   if (state === 'options') { if (e.code === 'ArrowDown' || e.code === 'PageDown') optScroll += 70; if (e.code === 'ArrowUp' || e.code === 'PageUp') optScroll -= 70; }
-  if (state === 'info' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) INFO.idx += e.code === 'ArrowRight' ? 1 : -1;
+  if (state === 'info' && ARQ === 1 && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) INFO.idx += e.code === 'ArrowRight' ? 1 : -1;
   if (state === 'maps' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) { const n = MAPS.length + 1; cfg.map = (cfg.map + (e.code === 'ArrowRight' ? 1 : n - 1)) % n; saveCfg(); }
-  if (state === 'chars' && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) CHP.idx += e.code === 'ArrowRight' ? 1 : -1;
+  if (state === 'chars' && !DADOS && (e.code === 'ArrowLeft' || e.code === 'ArrowRight')) CHP.idx += e.code === 'ArrowRight' ? 1 : -1;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', e => input.keys[e.code] = false);
@@ -48,7 +48,7 @@ let wheelAcc = 0;
 canvas.addEventListener('wheel', e => {
   if (state === 'log') { logScroll += e.deltaY; e.preventDefault(); }
   else if (state === 'options') { optScroll += e.deltaY; e.preventDefault(); }
-  else if (state === 'info' || state === 'chars') {   // rolar o mouse nas telas ARMAS e PERSONAGENS troca o item (clicar nas abas e as setas também funcionam)
+  else if ((state === 'info' && ARQ === 1) || (state === 'chars' && !DADOS)) {   // rolar o mouse nas telas ARMAS e PERSONAGENS troca o item (clicar nas abas e as setas também funcionam)
     e.preventDefault(); wheelAcc += e.deltaY;
     if (Math.abs(wheelAcc) >= 40) {
       const n = state === 'info' ? WKEYS.length : CHARS.length, d = wheelAcc > 0 ? 1 : n - 1;

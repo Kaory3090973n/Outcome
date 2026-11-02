@@ -15,8 +15,8 @@ let TIPNOW = null;
 const UI_TIPS = false;   // true = volta o balão de ajuda ao passar o mouse nos botões
 const BTN_TIPS = {
   'JOGAR': 'Escolha como jogar: partidas 1v1 a 4v4, sala personalizada, campo de batalha, treino ou tutorial.',
-  'ARQUIVOS': 'Lista as armas e os personagens do jogo.',
-  'DADOS': 'Conheça cada personagem: história, estilo de luta e atributos como velocidade, vida e força.',
+  'ARQUIVOS': 'Veja as armas e os personagens do jogo.',
+  'DADOS': 'Suas estatísticas: partidas, abates, precisão, tempo de jogo e favoritos.',
   'REGISTROS': 'Lista de tudo o que mudou em cada versão do jogo.',
   'OPÇÕES': 'Teclas, volume da música e dos efeitos e outras configurações.',
   'REPETIR TUTORIAL': 'Faz o passo a passo de novo: mover, mirar, socar, armas, cobertura e arremesso.',
@@ -209,8 +209,8 @@ function drawMenu(t) {
     try { ctx.letterSpacing = '3px'; } catch (e) {} txt('JOGAR', bx + 20, yy + H2 - 28, 28, '#0d0d11', 'left'); try { ctx.letterSpacing = '0px'; } catch (e) {}
     ui.push({ x: bx * k, y: yy * k, w: LW * k, h: H2 * k, fn: () => setState('modes') });
   });
-  B(1, o => button('ARQUIVOS', x1, y + o, RW, RH, () => { resetPicker(INFO); setState('info'); }));
-  B(2, o => button('DADOS', x2, y + o, RW, RH, () => { resetPicker(CHP); setState('chars'); }));
+  B(1, o => button('ARQUIVOS', x1, y + o, RW, RH, () => { ARQ = 0; setState('info'); }));
+  B(2, o => button('DADOS', x2, y + o, RW, RH, () => { DADOS = true; setState('chars'); }));
   B(3, o => button('REGISTROS', x1, y + RH + GP + o, RW, RH, () => { logScroll = 0; setState('log'); }));
   B(4, o => button('OPÇÕES', x2, y + RH + GP + o, RW, RH, () => { optBack = 'menu'; optScroll = 0; setState('options'); }));
   ctx.globalAlpha = baseA * ent(.8); txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right'); ctx.globalAlpha = baseA;   // contador de versão (só no lobby)

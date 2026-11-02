@@ -71,22 +71,19 @@ function sfxRiser(dur) {   // tensão subindo antes dos tiros
   g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.4, t + dur); g.gain.linearRampToValueAtTime(.0001, t + dur + .08); n.connect(f); f.connect(g); g.connect(sfxBus);
   const o = ac.createOscillator(), og = ac.createGain(); o.type = 'sawtooth'; o.frequency.setValueAtTime(55, t); o.frequency.exponentialRampToValueAtTime(260, t + dur); og.gain.setValueAtTime(.0001, t); og.gain.linearRampToValueAtTime(.12, t + dur); og.gain.linearRampToValueAtTime(.0001, t + dur + .08); o.connect(og); og.connect(sfxBus); o.start(t); o.stop(t + dur + .15);
 }
-function sfxHat() {   // clique no chapéu: tambor do revólver girando (os estalos aceleram junto com o giro do chapéu), whoosh de ar e a trava pesada no fim
-  if (!ac) return; const t = ac.currentTime + .01, out = sfxBus, D = 1.35, N = 24;
-  nz(out, t, .1, 'lowpass', 1500, .2, .002, .08, 400); tone(out, t, 'sine', 190, 70, .14, .4, .002, .12);   // pegada na arma: couro e metal abafado
-  tone(out, t + .02, 'square', 1300, 700, .03, .06, .0005, .022);                                         // trava soltando
+function sfxHat() {   // clique no chapéu: tambor de revólver girando (estalos que aceleram com o giro), sopro de ar subindo e a trava pesada no fim
+  if (!ac) return; const t = ac.currentTime + .01, out = sfxBus, D = 1.35, N = 22;
   for (let i = 0; i < N; i++) {   // catraca do tambor: intervalos cada vez menores e tom subindo
-    const u = i / N, tt = t + .1 + D * (1 - Math.pow(1 - u, 1.8)), p = 1 + u * .7;
-    nz(out, tt, .03, 'highpass', 3400 * p, .12 + u * .08, .0005, .016);
-    tone(out, tt, 'square', 1400 * p, 800 * p, .02, .035 + u * .02, .0005, .016);
-    tone(out, tt + .004, 'sine', 240 * p, 140 * p, .05, .13, .001, .04);
+    const u = i / N, tt = t + D * (1 - Math.pow(1 - u, 1.8)), p = 1 + u * .6;
+    nz(out, tt, .03, 'highpass', 3600 * p, .1 + u * .07, .0005, .016);
+    tone(out, tt + .003, 'sine', 260 * p, 150 * p, .05, .11, .001, .04);
   }
-  const T0 = t + .1, n = noiseSrc(T0, D + .3), f = ac.createBiquadFilter(), g = ac.createGain();   // whoosh: o chapéu vindo para cima da câmera
-  f.type = 'bandpass'; f.Q.value = .8; f.frequency.setValueAtTime(220, T0); f.frequency.exponentialRampToValueAtTime(2600, T0 + D);
-  g.gain.setValueAtTime(.0001, T0); g.gain.linearRampToValueAtTime(.3, T0 + D * .85); g.gain.exponentialRampToValueAtTime(.0001, T0 + D + .25);
+  const n = noiseSrc(t, D + .3), f = ac.createBiquadFilter(), g = ac.createGain();   // sopro de ar: o chapéu vindo para cima da câmera
+  f.type = 'bandpass'; f.Q.value = .8; f.frequency.setValueAtTime(220, t); f.frequency.exponentialRampToValueAtTime(2600, t + D);
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.28, t + D * .85); g.gain.exponentialRampToValueAtTime(.0001, t + D + .25);
   n.connect(f); f.connect(g); g.connect(out);
-  tone(out, T0, 'sawtooth', 60, 220, D, .06, .2, D * .8);                                                // tensão grave subindo
-  const te = T0 + D;   // trava pesada: o cão do revólver armando
+  tone(out, t, 'sawtooth', 60, 220, D, .05, .2, D * .8);                                                 // tensão grave subindo
+  const te = t + D;   // trava pesada: o cão do revólver armando
   nz(out, te, .06, 'highpass', 2600, .3, .0005, .04); tone(out, te, 'square', 1600, 600, .04, .08, .0005, .03);
   tone(out, te + .012, 'sine', 150, 48, .22, .75, .001, .2); nz(out, te + .01, .12, 'lowpass', 1000, .4, .001, .1, 250);
   tone(out, te + .07, 'triangle', 2200, 0, .22, .04, .001, .18);
@@ -144,23 +141,24 @@ function sfxSlide() {   // deslize: rajada de ar rasteira
 }
 
 /* ---- SOM DE BOTÃO (menus) ---- */
-/* Teclado mecânico caro (som "thock"): batida grave e encorpada, estalo seco da tecla e um fundo de ruído abafado. Cada botão soa um pouco diferente:
+/* Teclado mecânico caro (som "thock"): batida grave e encorpada, estalo seco e brilhante da tecla e um fundo de ruído abafado. Cada botão soa um pouco diferente:
    o tom muda com a altura do botão na tela (como as fileiras de um teclado) e um pouco ao acaso, para não cansar.
    kind 1 = botão principal (COMEÇAR, INICIAR...): mais grave, com uma segunda batida (barra de espaço) | kind 0 = botão comum */
 const UI_HOVER = true;   // false = sem o som ao passar o mouse
 const rowK = y => 1.07 - .14 * clamp((y || 0) / Math.max(1, innerHeight), 0, 1);   // botões mais embaixo = mais graves
 function sfxClick(kind, y) {
-  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002, v = rowK(y) * (1 + (Math.random() - .5) * .06), p = kind ? 1 : 0, k = p ? .78 : 1;
-  nz(sfxBus, t, .05, 'bandpass', 1900 * v, .3, .0005, .03);                                  // estalo seco da tecla
-  nz(sfxBus, t, .07, 'lowpass', 1100 * v, .55, .0005, .055, 320);                            // corpo de ruído abafado (bruto)
-  tone(sfxBus, t, 'sine', 340 * v * k, 120 * k, .1, .62, .001, .09);                         // thock: batida principal
-  tone(sfxBus, t + .003, 'triangle', 190 * v * k, 85 * k, .13, .34, .001, .11);              // ressonância da caixa
-  tone(sfxBus, t + .002, 'square', 2300 * v, 1300 * v, .015, .025, .0005, .012);             // a tecla encostando no fundo
-  if (p) { const t2 = t + .065; nz(sfxBus, t2, .05, 'bandpass', 1200, .25, .0005, .035); tone(sfxBus, t2, 'sine', 150 * v, 55, .12, .55, .001, .1); }   // segunda batida, mais pesada
+  if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002, v = rowK(y) * (1 + (Math.random() - .5) * .06), p = kind ? 1 : 0, k = p ? .8 : 1;
+  nz(sfxBus, t, .05, 'bandpass', 2700 * v, .34, .0005, .028);                                // estalo seco e claro da tecla
+  nz(sfxBus, t, .07, 'lowpass', 1700 * v, .4, .0005, .05, 520);                              // corpo de ruído (bruto, mas mais aberto)
+  tone(sfxBus, t, 'sine', 410 * v * k, 150 * k, .1, .55, .001, .085);                        // thock: batida principal
+  tone(sfxBus, t + .003, 'triangle', 240 * v * k, 110 * k, .12, .28, .001, .1);              // ressonância da caixa
+  tone(sfxBus, t + .002, 'square', 3200 * v, 1800 * v, .012, .04, .0005, .01);               // a tecla encostando no fundo
+  tone(sfxBus, t + .004, 'triangle', 3600 * v, 0, .09, .035, .0005, .07);                    // brilho curto que dá clareza
+  if (p) { const t2 = t + .065; nz(sfxBus, t2, .05, 'bandpass', 1500, .25, .0005, .035); tone(sfxBus, t2, 'sine', 170 * v, 65, .12, .5, .001, .1); }   // segunda batida, mais pesada
 }
-function sfxHover(y) {   // passar o mouse: toque leve na tecla, grave e curto
+function sfxHover(y) {   // passar o mouse: toque leve na tecla, curto e claro
   if (!ac || ac.state !== 'running') return; const t = ac.currentTime + .002, v = rowK(y) * (1 + (Math.random() - .5) * .08);
-  nz(sfxBus, t, .03, 'lowpass', 1500 * v, .1, .0005, .022, 500); tone(sfxBus, t, 'sine', 300 * v, 190, .04, .13, .0005, .03);
+  nz(sfxBus, t, .03, 'lowpass', 2300 * v, .1, .0005, .022, 700); tone(sfxBus, t, 'sine', 380 * v, 240, .04, .13, .0005, .03);
 }
 /* sons das telas ARMAS e PERSONAGENS: tique ao rolar a barra, e a sequência de quando a peça escolhida aparece (luz, subida, encaixe, estatísticas) */
 function sfxScroll(dir) {   // barra de seleção: tique de catraca (mais agudo ao avançar, mais grave ao voltar)

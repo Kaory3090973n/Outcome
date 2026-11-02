@@ -188,7 +188,7 @@ function drawPicker(t, o) {
     if (ar <= 3) ui.push({ x: (x - sw / 2) * ms, y: (stripY - sh / 2 + rise) * ms, w: sw * ms, h: sh * ms, fn: () => { S0.idx = k; S0.sk = 1; } });
   }
   ctx.restore();
-  ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => setState('menu'));
+  ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => o.back ? o.back() : setState('menu'));
   ctx.globalAlpha = ent(.6); txt(TOUCH ? o.hintT : o.hint, cx, H - 18, 12, 'rgba(255,255,255,.4)', 'center'); ctx.globalAlpha = 1;
   ctx.restore();
 }
@@ -235,24 +235,67 @@ const weaponPanel = (it, rx, rw, pa, A, g) => {
     ctx.restore();
 };
 const INFO = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
+let ARQ = 0, DADOS = false;   // ARQ: 0 = lista de categorias de ARQUIVOS, 1 = armas | DADOS: true = tela de estatísticas (estado 'chars'), false = escolha de personagens
 const resetPicker = st => { st.idx = 0; st.p = 0; st.selT = 0; st.prev = 0; st.out = null; st.sI = null; st.sf = 0; st.sk = 0; };
-/* ARQUIVOS (provisório): lista simples das armas e dos personagens lado a lado. Usa o estado 'info', que antes era a tela ARMAS. */
-const drawInfo = t => {
-  const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, ent = scrEnter('ARQUIVOS'), INK = '#e7e4d3', MUTE = '#8a8a96';
+const drawWeapons = t => drawPicker(t, { st: INFO, N: WKEYS.length + 1, title: 'ARMAS', back: () => { ARQ = 0; }, liftIcon: true, auraK: 1.5, floorK: .5, hero: weaponHero, panel: weaponPanel,
+  hint: 'Roda do mouse, setas ← → ou clique trocam de arma | Esc volta', hintT: 'Toque nos retângulos para trocar de arma',
+  accent: it => WEAPONS[WKEYS[it - 1]].accent,
+  icon: (it, x, y, w, h) => { const q = WEAPONS[WKEYS[it - 1]], S = q.sil; silAt(q, x, y, Math.min(w * .72 / S.w, h * .62 / S.h), '#ffffff'); } });
+/* ARQUIVOS: três botões na esquerda (ARMAS, PERSONAGENS, EM BREVE). ARMAS e PERSONAGENS abrem os seletores com a barra de retângulos. */
+function drawFiles(t) {
+  const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, ent = scrEnter('ARQUIVOS'), INK = '#e7e4d3';
   ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'none');
   ctx.save(); ctx.scale(ms, ms);
   scrHead('ARQUIVOS', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent);
-  const colW = Math.min(W * .44, 300), xL = cx - colW - 14, xR = cx + 14, top = 104, step = clamp((H - top - 90) / Math.max(WKEYS.length, CHARS.length, 1), 16, 28);
-  const col = (x, title, rows) => {
-    ctx.globalAlpha = ent(.2); txt(title, x, top - 20, 13, MUTE, 'left');
-    ctx.strokeStyle = 'rgba(231,228,211,.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, top - 8.5); ctx.lineTo(x + colW, top - 8.5); ctx.stroke();
-    rows.forEach(([a, b], i) => { ctx.globalAlpha = ent(.28 + i * .03); txt(a, x, top + 8 + i * step, 15, INK, 'left'); txt(b, x + colW, top + 8 + i * step, 11, MUTE, 'right'); });
+  const bw = clamp(W * .3, 180, 280), bh = 64, gp = 14, x = clamp(W * .08, 24, 100), y0 = (H - (bh * 3 + gp * 2)) / 2 + 18;
+  const open = (st, fn) => () => { if (st) resetPicker(st); fn(); };
+  const items = [['ARMAS', open(INFO, () => { ARQ = 1; })], ['PERSONAGENS', open(CHP, () => { DADOS = false; setState('chars'); })], ['EM BREVE', null]];
+  items.forEach(([label, fn], i) => {
+    const e = ent(.2 + i * .08), yy = y0 + i * (bh + gp) + (1 - e) * 18; ctx.globalAlpha = e;
+    if (fn) button(label, x, yy, bw, bh, fn);
+    else { btnShape(x, yy, bw, bh, false, false); ctx.globalAlpha = e * .35; txt(label, x + bw / 2, yy + bh / 2 + 1, Math.min(bh * .4, 20), INK, 'center'); }
+  });
+  ctx.globalAlpha = ent(.5); cornerBtn('VOLTAR', -1, W, H, () => setState('menu')); ctx.globalAlpha = 1;
+  ctx.restore();
+}
+const drawInfo = t => { if (ARQ === 1) drawWeapons(t); else drawFiles(t); };
+/* ------------------------- DADOS (estatísticas do jogador) -------------- */
+/* Salvas no aparelho (localStorage). O jogo alimenta com: statsAdd('games'), statsAdd('wins'), statsAdd('kills'), statsAdd('shots'), statsAdd('hits'),
+   statsAdd('time', segundos), statsMax('bestSurv', segundos), statsMax('hi', pontos), statsUse('weapons', chaveDaArma), statsUse('chars', índiceDoPersonagem), e statsSave() no fim da partida. */
+const STATS = { games: 0, wins: 0, losses: 0, kills: 0, shots: 0, hits: 0, time: 0, bestSurv: 0, hi: 0, weapons: {}, chars: {} };
+try { const sv = JSON.parse(localStorage.getItem('oc_stats') || '{}'); Object.assign(STATS, sv); if (!STATS.weapons || typeof STATS.weapons !== 'object') STATS.weapons = {}; if (!STATS.chars || typeof STATS.chars !== 'object') STATS.chars = {}; } catch (e) {}
+function statsSave() { try { localStorage.setItem('oc_stats', JSON.stringify(STATS)); } catch (e) {} }
+function statsAdd(k, n) { STATS[k] = (STATS[k] || 0) + (n == null ? 1 : n); }
+function statsMax(k, v) { if (v > (STATS[k] || 0)) STATS[k] = v; }
+function statsUse(kind, key) { const o = STATS[kind]; o[key] = (o[key] || 0) + 1; }
+const statsTop = o => { let b = null, n = 0; for (const k in o) if (o[k] > n) { n = o[k]; b = k; } return b; };
+function drawStats(t) {
+  const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, ent = scrEnter('DADOS'), INK = '#e7e4d3', MUTE = '#8a8a96', S = STATS;
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'none');
+  ctx.save(); ctx.scale(ms, ms);
+  scrHead('DADOS', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent);
+  const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : 0, wr = pct(S.wins, S.games), ac = pct(S.hits, S.shots);
+  const hm = s => Math.floor(s / 3600) + 'h ' + String(Math.floor(s % 3600 / 60)).padStart(2, '0') + 'min', ms2 = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+  const wk = statsTop(S.weapons), ck = statsTop(S.chars);
+  const A = [['PARTIDAS JOGADAS', String(S.games)], ['VITÓRIAS / DERROTAS', S.wins + ' / ' + S.losses], ['TAXA DE VITÓRIA', wr + '%', wr / 100], ['INIMIGOS ELIMINADOS', String(S.kills)], ['PRECISÃO DE TIRO', ac + '%', ac / 100]];
+  const B = [['TEMPO TOTAL DE JOGO', hm(S.time)], ['MAIOR SOBREVIVÊNCIA', ms2(S.bestSurv)], ['PONTUAÇÃO MÁXIMA', String(S.hi)],
+    ['ARMA MAIS UTILIZADA', wk && WEAPONS[wk] ? WEAPONS[wk].model : '—'], ['PERSONAGEM FAVORITO', ck != null && CHARS[ck] ? CHARS[ck].name : '—']];
+  const colW = Math.min(W * .44, 300), xL = cx - colW - 14, xR = cx + 14, top = 108, step = clamp((H - top - 90) / 5, 38, 56);
+  const col = (x, title, rows, d) => {
+    ctx.globalAlpha = ent(.2 + d); txt(title, x, top - 22, 13, MUTE, 'left');
+    ctx.strokeStyle = 'rgba(231,228,211,.3)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, top - 10.5); ctx.lineTo(x + colW, top - 10.5); ctx.stroke();
+    rows.forEach(([lab, val, bar], i) => {
+      const y = top + 14 + i * step; ctx.globalAlpha = ent(.28 + d + i * .05);
+      txt(lab, x, y, 12, MUTE, 'left'); txt(val, x + colW, y, 19, INK, 'right');
+      ctx.fillStyle = 'rgba(231,228,211,.1)'; ctx.fillRect(x, y + 14, colW, 2);
+      if (bar != null) { ctx.fillStyle = INK; ctx.fillRect(x, y + 14, colW * clamp(bar, 0, 1), 2); }
+    });
   };
-  col(xL, 'ARMAS', WKEYS.map(k => [WEAPONS[k].model, WEAPONS[k].kind || 'ARMA']));
-  col(xR, 'PERSONAGENS', CHARS.map(c => [c.name, c.alias || '']));
+  col(xL, 'DESEMPENHO EM COMBATE', A, 0); col(xR, 'TEMPO E PROGRESSO', B, .05);
+  ctx.globalAlpha = ent(.6); txt('Os números ficam salvos neste aparelho', cx, H - 18, 12, 'rgba(255,255,255,.4)', 'center');
   ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => setState('menu')); ctx.globalAlpha = 1;
   ctx.restore();
-};
+}
 /* ------------------------- PERSONAGENS ---------------------------------- */
 const bE = (x, y, rx, ry, f, st, lw = 2) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); if (f) { ctx.fillStyle = f; ctx.fill(); } if (st) { ctx.strokeStyle = st; ctx.lineWidth = lw; ctx.stroke(); } };
 const bP = (pts, f, st, lw = 2) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); if (f) { ctx.fillStyle = f; ctx.fill(); } if (st) { ctx.strokeStyle = st; ctx.lineWidth = lw; ctx.stroke(); } };
@@ -375,8 +418,9 @@ const charPanel = (it, rx, rw, pa, A, g) => {
 };
 const CHP = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
 function drawChars(t) {
+  if (DADOS) { drawStats(t); return; }
   for (const P of CHARS) if (!P._img) makeCharImg(P);
-  drawPicker(t, { st: CHP, N: CHARS.length + 1, title: 'PERSONAGENS', floorK: .85, auraK: 1.1, hero: charHero, panel: charPanel,
+  drawPicker(t, { st: CHP, N: CHARS.length + 1, title: 'PERSONAGENS', back: () => { ARQ = 0; setState('info'); }, floorK: .85, auraK: 1.1, hero: charHero, panel: charPanel,
     hint: 'Roda do mouse, setas ← → ou clique trocam de personagem | Esc volta', hintT: 'Toque nos retângulos para trocar de personagem',
     accent: it => CHARS[it - 1].accent,
     icon: (it, x, y, w, h) => { const s = Math.min(h * .8 / BUST_H, w * .42 / 150); bustAt(CHARS[it - 1], 'w', x, y + BUST_H * s / 2, s, 1); } });
