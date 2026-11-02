@@ -12,11 +12,12 @@ function btnShape(x, y, w, h, hov, pri, r) {
 /* Balão de ajuda: passando o mouse num botão aparece uma explicação perto do cursor. Os textos padrão ficam em BTN_TIPS (pelo nome do botão);
    qualquer tela também pode passar o seu próprio texto (7º parâmetro de button() ou direto em TIPNOW). Desenhado por último, no fim de cada quadro. */
 let TIPNOW = null;
+const UI_TIPS = false;   // true = volta o balão de ajuda ao passar o mouse nos botões
 const BTN_TIPS = {
   'JOGAR': 'Escolha como jogar: partidas 1v1 a 4v4, sala personalizada, campo de batalha, treino ou tutorial.',
-  'ARMAS': 'Veja todas as armas do jogo, como cada uma funciona e os números de cada uma.',
-  'PERSONAGENS': 'Conheça cada personagem: história, estilo de luta e atributos como velocidade, vida e força.',
-  'ATUALIZAÇÃO': 'Lista de tudo o que mudou em cada versão do jogo.',
+  'ARQUIVOS': 'Lista as armas e os personagens do jogo.',
+  'DADOS': 'Conheça cada personagem: história, estilo de luta e atributos como velocidade, vida e força.',
+  'REGISTROS': 'Lista de tudo o que mudou em cada versão do jogo.',
   'OPÇÕES': 'Teclas, volume da música e dos efeitos e outras configurações.',
   'REPETIR TUTORIAL': 'Faz o passo a passo de novo: mover, mirar, socar, armas, cobertura e arremesso.',
   'CONTINUAR': 'Volta para a partida.',
@@ -34,7 +35,7 @@ const BTN_TIPS = {
   'COMEÇAR': 'Começa o treino solitário. O personagem é sorteado.',
 };
 function flushTip() {
-  const tp = TIPNOW; TIPNOW = null; if (!tp || TOUCH) return;
+  const tp = TIPNOW; TIPNOW = null; if (!UI_TIPS || !tp || TOUCH) return;   // UI_TIPS = false: sem o balão de ajuda ao passar o mouse
   const W = innerWidth, H = innerHeight, d = RES;
   ctx.save(); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   const lines = wrapLines(tp, Math.min(300, W - 40), 12), bw = Math.min(320, W - 20), bh = lines.length * 18 + 18;
@@ -47,7 +48,7 @@ function button(label, x, y, w, h, fn, style, tip) {   // style === 'primary' ->
   const k = ctx.getTransform().a / (RES);   // botões funcionam também com o menu encolhido
   const hov = input.mx > x * k && input.mx < (x + w) * k && input.my > y * k && input.my < (y + h) * k, pri = style === 'primary';
   ctx.shadowBlur = 0;
-  if (hov && !TOUCH && state !== 'intro') hoverTick(label);
+  if (hov && !TOUCH && state !== 'intro') hoverTick(label, y * k);
   if (hov) { const tp = tip || BTN_TIPS[label]; if (tp) TIPNOW = tp; }
   btnShape(x, y, w, h, hov, pri);
   txt(label, x + w / 2, y + h / 2 + 1, Math.min(h * .4, 20), pri ? '#0d0d11' : '#e7e4d3', 'center');
@@ -208,9 +209,9 @@ function drawMenu(t) {
     try { ctx.letterSpacing = '3px'; } catch (e) {} txt('JOGAR', bx + 20, yy + H2 - 28, 28, '#0d0d11', 'left'); try { ctx.letterSpacing = '0px'; } catch (e) {}
     ui.push({ x: bx * k, y: yy * k, w: LW * k, h: H2 * k, fn: () => setState('modes') });
   });
-  B(1, o => button('ARMAS', x1, y + o, RW, RH, () => { resetPicker(INFO); setState('info'); }));
-  B(2, o => button('PERSONAGENS', x2, y + o, RW, RH, () => { resetPicker(CHP); setState('chars'); }));
-  B(3, o => button('ATUALIZAÇÃO', x1, y + RH + GP + o, RW, RH, () => { logScroll = 0; setState('log'); }));
+  B(1, o => button('ARQUIVOS', x1, y + o, RW, RH, () => { resetPicker(INFO); setState('info'); }));
+  B(2, o => button('DADOS', x2, y + o, RW, RH, () => { resetPicker(CHP); setState('chars'); }));
+  B(3, o => button('REGISTROS', x1, y + RH + GP + o, RW, RH, () => { logScroll = 0; setState('log'); }));
   B(4, o => button('OPÇÕES', x2, y + RH + GP + o, RW, RH, () => { optBack = 'menu'; optScroll = 0; setState('options'); }));
   ctx.globalAlpha = baseA * ent(.8); txt(UPDATES[0].v, IW - 20, IH - 18, 12, MUTE, 'right'); ctx.globalAlpha = baseA;   // contador de versão (só no lobby)
   ctx.restore();

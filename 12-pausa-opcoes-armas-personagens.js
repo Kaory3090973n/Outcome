@@ -236,10 +236,23 @@ const weaponPanel = (it, rx, rw, pa, A, g) => {
 };
 const INFO = { idx: 0, p: 0, selT: 0, last: 0, prev: 0, out: null };
 const resetPicker = st => { st.idx = 0; st.p = 0; st.selT = 0; st.prev = 0; st.out = null; st.sI = null; st.sf = 0; st.sk = 0; };
-const drawInfo = t => drawPicker(t, { st: INFO, N: WKEYS.length + 1, title: 'ARMAS', liftIcon: true, auraK: 1.5, floorK: .5, hero: weaponHero, panel: weaponPanel,
-  hint: 'Roda do mouse, setas ← → ou clique trocam de arma | Esc volta', hintT: 'Toque nos retângulos para trocar de arma',
-  accent: it => WEAPONS[WKEYS[it - 1]].accent,
-  icon: (it, x, y, w, h) => { const q = WEAPONS[WKEYS[it - 1]], S = q.sil; silAt(q, x, y, Math.min(w * .72 / S.w, h * .62 / S.h), '#ffffff'); } });
+/* ARQUIVOS (provisório): lista simples das armas e dos personagens lado a lado. Usa o estado 'info', que antes era a tela ARMAS. */
+const drawInfo = t => {
+  const ms = uiScale(), W = innerWidth / ms, H = innerHeight / ms, cx = W / 2, ent = scrEnter('ARQUIVOS'), INK = '#e7e4d3', MUTE = '#8a8a96';
+  ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(W, H, ms, 1, ent, 'none');
+  ctx.save(); ctx.scale(ms, ms);
+  scrHead('ARQUIVOS', cx, 36, clamp(Math.min(W / 14, H / 14), 20, 32), W, ent);
+  const colW = Math.min(W * .44, 300), xL = cx - colW - 14, xR = cx + 14, top = 104, step = clamp((H - top - 90) / Math.max(WKEYS.length, CHARS.length, 1), 16, 28);
+  const col = (x, title, rows) => {
+    ctx.globalAlpha = ent(.2); txt(title, x, top - 20, 13, MUTE, 'left');
+    ctx.strokeStyle = 'rgba(231,228,211,.25)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, top - 8.5); ctx.lineTo(x + colW, top - 8.5); ctx.stroke();
+    rows.forEach(([a, b], i) => { ctx.globalAlpha = ent(.28 + i * .03); txt(a, x, top + 8 + i * step, 15, INK, 'left'); txt(b, x + colW, top + 8 + i * step, 11, MUTE, 'right'); });
+  };
+  col(xL, 'ARMAS', WKEYS.map(k => [WEAPONS[k].model, WEAPONS[k].kind || 'ARMA']));
+  col(xR, 'PERSONAGENS', CHARS.map(c => [c.name, c.alias || '']));
+  ctx.globalAlpha = ent(.4); cornerBtn('VOLTAR', -1, W, H, () => setState('menu')); ctx.globalAlpha = 1;
+  ctx.restore();
+};
 /* ------------------------- PERSONAGENS ---------------------------------- */
 const bE = (x, y, rx, ry, f, st, lw = 2) => { ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, TAU); if (f) { ctx.fillStyle = f; ctx.fill(); } if (st) { ctx.strokeStyle = st; ctx.lineWidth = lw; ctx.stroke(); } };
 const bP = (pts, f, st, lw = 2) => { ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath(); if (f) { ctx.fillStyle = f; ctx.fill(); } if (st) { ctx.strokeStyle = st; ctx.lineWidth = lw; ctx.stroke(); } };
