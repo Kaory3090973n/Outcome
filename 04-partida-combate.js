@@ -89,11 +89,12 @@ function startMatch() {
   const pre = cfg.team > 0, bt = pre && cfg.bt;   // bt = BOTS do treinamento (aceita infinito e tempo livres)
   // predefinido (1v1..4v4): clássico, 3 minutos, times
   M = { round: 0, map: mi, room: cfg.team, team: pre, sc: new Array(pre ? 2 : nBots() + 1).fill(0), target: ((pre && !bt) || cfg.mode === 0) ? PTS[cfg.pts] : 0, time: pre && !bt ? 180 : TIMES[cfg.time], phase: 'count', phaseT: 0, left: 0, flashT: 0, last: null };
-  kills = 0; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); nextRound();
+  kills = 0; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); statsAdd('games'); statsUse('chars', cfg.char); statsSave(); nextRound();   // estatísticas: partida iniciada + personagem escolhido
 }
-function nextRound() { M.round++; startGame(false, true); M.phase = M.round === 1 ? 'map' : 'count'; M.mapSfx = false; M.phaseT = 0; M.left = M.time; M.flashT = 0; M.last = null; M.beep = -1; }
+function nextRound() { M.round++; M.rt = 0; startGame(false, true); M.phase = M.round === 1 ? 'map' : 'count'; M.mapSfx = false; M.phaseT = 0; M.left = M.time; M.flashT = 0; M.last = null; M.beep = -1; }
 const fname = f => f.pal.name + (f.isPlayer ? ' (VOCÊ)' : '');
 function endRound(alive) {
+  if (alive.includes(player)) statsMax('bestSurv', M.rt || 0); statsSave();   // estatísticas: sobreviveu à rodada inteira
   let w = null, why = '', wt = -1;
   const ts = [...new Set(alive.map(f => f.team))];
   if (ts.length === 1) { wt = ts[0]; w = alive.find(f => f.team === wt); why = M.team ? 'ÚLTIMO TIME EM PÉ' : 'ÚLTIMO EM PÉ'; }
@@ -122,12 +123,12 @@ function stepMatch(dt) {   // devolve o dt da simulação (-1 = congelada)
     return -1;
   }
   if (M.phase === 'fight') {
-    M.left -= dt; const alive = allF().filter(f => !f.dead);
+    M.left -= dt; M.rt = (M.rt || 0) + dt; statsAdd('time', dt); const alive = allF().filter(f => !f.dead);   // M.rt = tempo da rodada | estatística: tempo de jogo
     if (new Set(alive.map(f => f.team)).size <= 1 || M.left <= 0) { M.left = Math.max(0, M.left); endRound(alive); }
     return dt;
   }
   if (M.phase === 'rend') {
-    if (M.phaseT > 3.4) { if (M.target && Math.max(...M.sc) >= M.target) { M.phase = 'mend'; setState('mend'); } else nextRound(); return -1; }
+    if (M.phaseT > 3.4) { if (M.target && Math.max(...M.sc) >= M.target) { M.phase = 'mend'; statsMatchEnd(); setState('mend'); } else nextRound(); return -1; }
     return dt * .25;   // câmera lenta no fim da rodada
   }
   return -1;
@@ -190,6 +191,7 @@ const enemiesOf = f => allF().filter(o => o !== f && !o.dead && o.team !== f.tea
 
 function damage(t, dmg, ang, src, kind) {
   if (t.dead) return;
+  if (kind === 'gun' && src && src.isPlayer && src.team !== t.team && statsLive()) statsAdd('hits');   // estatística: tiro do jogador que acertou
   if (TUT) tutDamage(t, dmg, src);
   if (src && src.isPlayer && !t.isPlayer && src.team !== t.team) { if (cmbN === 0) cmbAge = 0; cmbN++; cmbT = 4; cmbPop = 1; }   // acerto do jogador soma no combo
   if (t.isPlayer) { cmbN = 0; cmbT = 0; }   // levou dano: o combo some
@@ -303,12 +305,13 @@ function kill(f, src) {
   f.dead = true; f.hp = 0;
   for (let i = 0; i < 12; i++) addDecal(f.x + rnd(-18, 18), f.y + rnd(-18, 18), rnd(3, 9));
   unholster(f); dropWeapon(f);
-  if (f.isPlayer) { if (training || !M) setState('dead'); shake = 10; }   // em partida: fica eliminado e espectando até a rodada acabar
-  else { f.respawnT = 4; if (src && src.isPlayer) { kills++; killT = 0; cmbN = 0; cmbT = 0; } }   // abate: aparece a caveira vermelha e o combo some
+  if (f.isPlayer) { if (statsLive()) statsMax('bestSurv', M.rt || 0); if (training || !M) setState('dead'); shake = 10; }   // em partida: fica eliminado e espectando até a rodada acabar
+  else { f.respawnT = 4; if (src && src.isPlayer) { kills++; if (statsLive()) { statsAdd('kills'); if (src.weapon && WEAPONS[src.weapon] && WEAPONS[src.weapon].melee) statsUse('weapons', src.weapon); } killT = 0; cmbN = 0; cmbT = 0; } }   // abate: aparece a caveira vermelha e o combo some
 }
 
 function shoot(f, w) {
   if (TUT && f.isPlayer) { TUT.c.shots++; if (f.cover && f.peekK > .5) TUT.c.peek++; }
+  if (f.isPlayer && statsLive()) { statsAdd('shots', w.pellets || 1); statsUse('weapons', f.weapon); }   // estatística: disparos (cada chumbinho conta) e arma usada
   f.fireCd = w.rate; f.mag--; f.kick = w.kick; f.flash = .06;
   sfxGun(f.weapon, f.isPlayer || !player ? 1 : clamp(1 - Math.hypot(f.x - player.x, f.y - player.y) / 900, .15, 1));   // som próprio de cada arma (mais baixo se o atirador está longe)
   if (NET.online && NET.host) NET.ev.push(['s', f.weapon, Math.round(f.x), Math.round(f.y)]);

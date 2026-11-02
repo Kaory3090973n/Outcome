@@ -264,6 +264,11 @@ const drawInfo = t => { if (ARQ === 1) drawWeapons(t); else drawFiles(t); };
    statsAdd('time', segundos), statsMax('bestSurv', segundos), statsMax('hi', pontos), statsUse('weapons', chaveDaArma), statsUse('chars', índiceDoPersonagem), e statsSave() no fim da partida. */
 const STATS = { games: 0, wins: 0, losses: 0, kills: 0, shots: 0, hits: 0, time: 0, bestSurv: 0, hi: 0, weapons: {}, chars: {} };
 try { const sv = JSON.parse(localStorage.getItem('oc_stats') || '{}'); Object.assign(STATS, sv); if (!STATS.weapons || typeof STATS.weapons !== 'object') STATS.weapons = {}; if (!STATS.chars || typeof STATS.chars !== 'object') STATS.chars = {}; } catch (e) {}
+const statsLive = () => !!M && !training;   // só partidas de verdade contam (treino e tutorial não)
+function statsMatchEnd() {   // fim da partida: vitória = maior pontuação sozinho | também guarda a pontuação máxima
+  try { const me = M.sc[0], mx = Math.max(...M.sc); statsMax('hi', me); if (me === mx && M.sc.filter(v => v === mx).length === 1) statsAdd('wins'); else statsAdd('losses'); } catch (e) {}
+  statsSave();
+}
 function statsSave() { try { localStorage.setItem('oc_stats', JSON.stringify(STATS)); } catch (e) {} }
 function statsAdd(k, n) { STATS[k] = (STATS[k] || 0) + (n == null ? 1 : n); }
 function statsMax(k, v) { if (v > (STATS[k] || 0)) STATS[k] = v; }
