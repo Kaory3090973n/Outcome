@@ -59,7 +59,9 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ------------------------------ TOUCH (celular) ----------------------- */
-function resetTouch() { touch.move.id = touch.aim.id = null; touch.move.dx = touch.move.dy = 0; touch.btn = {}; input.down = false; }
+let menuTap = null;   // toque em menu: { id, x, y, t } enquanto o dedo está apoiado
+const TAP_MAX = 350, TAP_SLOP = 12;   // segurou mais que isso (ms) ou arrastou mais que isso (px) = não é clique
+function resetTouch() { menuTap = null; touch.move.id = touch.aim.id = null; touch.move.dx = touch.move.dy = 0; touch.btn = {}; input.down = false; }
 function touchLayout() {
   const W = innerWidth, H = innerHeight, s = clamp(Math.min(W, H) / 420, .8, 1.2);
   const btns = ['E', 'R', 'G', 'Q', 'C', 'M', 'S'].map((k, i) => ({ k, x: W / 2 + (i - 3) * 70 * s, y: H - 46 * s, r: 30 * s }));
@@ -70,7 +72,7 @@ function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y >
 function onTouchStart(t) {
   if (state === 'intro') { introClick(); return; }
   input.mx = t.clientX; input.my = t.clientY;
-  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; bindCapture = null; nameFocus = false; clickUI(t.clientX, t.clientY); input.mx = input.my = -9999; return; }   // dedo não é mouse: limpa a posição para a próxima tela não nascer com "hover"
+  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; menuTap = { id: t.identifier, x: t.clientX, y: t.clientY, t: performance.now() }; return; }   // segurar = hover (borda amarela e dica); o clique só vale se soltar rápido
   if (TUT && tutHit(t.clientX, t.clientY)) return;
   const L = touchLayout();
   for (const b of L.btns) if (Math.hypot(t.clientX - b.x, t.clientY - b.y) < b.r + 8) {
@@ -86,6 +88,7 @@ function onTouchStart(t) {
   }
 }
 function onTouchMove(t) {
+  if (menuTap && t.identifier === menuTap.id && Math.hypot(t.clientX - menuTap.x, t.clientY - menuTap.y) > TAP_SLOP) { menuTap = null; input.mx = input.my = -9999; }   // arrastou (rolar a lista): não é clique
   if (state === 'log' && t.identifier === touch.drag) { logScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
   if (state === 'options' && t.identifier === touch.drag) { optScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
   if (t.identifier === touch.move.id) {
@@ -101,6 +104,10 @@ function onTouchMove(t) {
   }
 }
 function onTouchEnd(t) {
+  if (menuTap && t.identifier === menuTap.id) {
+    const tap = menuTap; menuTap = null;
+    if (state !== 'play' && performance.now() - tap.t <= TAP_MAX) { bindCapture = null; nameFocus = false; clickUI(tap.x, tap.y); }   // toque rápido = clique
+  }
   if (state !== 'play') input.mx = input.my = -9999;   // dedo saiu da tela: sem hover fantasma nos menus
   if (t.identifier === touch.move.id) { touch.move.id = null; touch.move.dx = touch.move.dy = 0; }
   if (t.identifier === touch.aim.id) { touch.aim.id = null; input.down = false; }
