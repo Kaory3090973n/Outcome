@@ -59,6 +59,7 @@ canvas.addEventListener('wheel', e => {
 }, { passive: false });
 
 /* ------------------------------ TOUCH (celular) ----------------------- */
+let swipeAcc = 0;   // arrasto acumulado nas telas ARMAS e PERSONAGENS (40 px = 1 item)
 let menuTap = null;   // toque em menu: { id, x, y, t } enquanto o dedo está apoiado
 const TAP_MAX = 350, TAP_SLOP = 12;   // segurou mais que isso (ms) ou arrastou mais que isso (px) = não é clique
 function resetTouch() { menuTap = null; touch.move.id = touch.aim.id = null; touch.move.dx = touch.move.dy = 0; touch.btn = {}; input.down = false; }
@@ -72,7 +73,7 @@ function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y >
 function onTouchStart(t) {
   if (state === 'intro') { introClick(); return; }
   input.mx = t.clientX; input.my = t.clientY;
-  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; menuTap = { id: t.identifier, x: t.clientX, y: t.clientY, t: performance.now() }; return; }   // segurar = hover (borda amarela e dica); o clique só vale se soltar rápido
+  if (state !== 'play') { touch.drag = t.identifier; touch.lastX = t.clientX; touch.lastY = t.clientY; swipeAcc = 0; menuTap = { id: t.identifier, x: t.clientX, y: t.clientY, t: performance.now() }; return; }   // segurar = hover (borda amarela e dica); o clique só vale se soltar rápido
   if (TUT && tutHit(t.clientX, t.clientY)) return;
   const L = touchLayout();
   for (const b of L.btns) if (Math.hypot(t.clientX - b.x, t.clientY - b.y) < b.r + 8) {
@@ -89,6 +90,12 @@ function onTouchStart(t) {
 }
 function onTouchMove(t) {
   if (menuTap && t.identifier === menuTap.id && Math.hypot(t.clientX - menuTap.x, t.clientY - menuTap.y) > TAP_SLOP) { menuTap = null; input.mx = input.my = -9999; }   // arrastou (rolar a lista): não é clique
+  if (((state === 'info' && ARQ === 1) || (state === 'chars' && !DADOS)) && t.identifier === touch.drag) {   // ARMAS e PERSONAGENS: arrastar o dedo troca o item (igual à rodinha do mouse)
+    const dx = t.clientX - touch.lastX, dy = t.clientY - touch.lastY; touch.lastX = t.clientX; touch.lastY = t.clientY;
+    swipeAcc += Math.abs(dx) > Math.abs(dy) ? -dx : -dy;   // para cima ou para a esquerda = próximo
+    if (Math.abs(swipeAcc) >= 40) { (state === 'info' ? INFO : CHP).idx += swipeAcc > 0 ? 1 : -1; swipeAcc = 0; }
+    return;
+  }
   if (state === 'log' && t.identifier === touch.drag) { logScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
   if (state === 'options' && t.identifier === touch.drag) { optScroll -= (t.clientY - touch.lastY) / uiScale(); touch.lastY = t.clientY; return; }
   if (t.identifier === touch.move.id) {
