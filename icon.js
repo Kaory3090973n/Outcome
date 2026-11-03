@@ -2,7 +2,8 @@
 (function () {
   function hatIcon(N) {
     const c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
-    const s = N * .94 / 110; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s);   // fundo transparente: só o chapéu, reto
+    g.fillStyle = '#000'; g.fillRect(0, 0, N, N);   // fundo preto
+    const s = N * .94 / 110; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s);
     logoHat(g, '#0d0d11', '#e7e4d3', true); g.restore(); return c.toDataURL('image/png');
   }
   try {
@@ -12,7 +13,7 @@
     add('icon', i32, '64x64'); add('apple-touch-icon', i180, '180x180');
     const old = document.querySelector('link[rel="manifest"]');
     if (old) {   // refaz o manifesto já com o ícone do chapéu
-      const m = { name: 'OUTCOME', short_name: 'OUTCOME', start_url: location.href.split('#')[0], scope: location.href.replace(/[^\/]*$/, ''), display: 'fullscreen', orientation: 'landscape', background_color: '#0d0a14', theme_color: '#0d0a14',
+      const m = { name: 'OUTCOME', short_name: 'OUTCOME', start_url: location.href.split('#')[0], scope: location.href.replace(/[^\/]*$/, ''), display: 'fullscreen', orientation: 'landscape', background_color: '#000000', theme_color: '#000000',
         icons: [{ src: i192, sizes: '192x192', type: 'image/png', purpose: 'any' }, { src: i512, sizes: '512x512', type: 'image/png', purpose: 'any' }] };
       old.href = URL.createObjectURL(new Blob([JSON.stringify(m)], { type: 'application/manifest+json' }));
     }
