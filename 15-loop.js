@@ -54,10 +54,17 @@ function loop(now) {
     if (state === 'tutend') drawTutEnd();
     if (state === 'mend' && M) drawMatchEnd();
   }
-  if (TOUCH && state === 'play' && innerHeight > innerWidth) {   // pede para girar o celular
-    ctx.fillStyle = 'rgba(8,4,18,.92)'; ctx.fillRect(0, 0, innerWidth, innerHeight);
-    txt('GIRE O CELULAR', innerWidth / 2, innerHeight / 2 - 12, Math.min(26, innerWidth / 12), '#e7e4d3', 'center');
-    txt('(modo paisagem)', innerWidth / 2, innerHeight / 2 + 22, 14, '#8a8a96', 'center');
+  if (TOUCH && state === 'play' && innerHeight > innerWidth) {   // pede para girar o celular: fundo preto + celular de contorno virando
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, innerWidth, innerHeight);
+    const T = (performance.now() / 1000) % 2.8, ez = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const k = T < .5 ? 0 : T < 1.4 ? ez((T - .5) / .9) : T < 2.2 ? 1 : 1 - ez((T - 2.2) / .6);   // parado, gira, parado, volta
+    ctx.save(); ctx.translate(innerWidth / 2, innerHeight / 2 - 50); ctx.rotate(-k * Math.PI / 2);
+    ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(-24, -42, 48, 84, 10); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(-7, -35, 14, 3, 1.5); ctx.fill(); ctx.restore();
+    const fs = Math.min(26, innerWidth / 17);
+    txt('GIRE O CELULAR', innerWidth / 2, innerHeight / 2 + 36, fs, '#fff', 'center');
+    txt('PARA O MODO HORIZONTAL', innerWidth / 2, innerHeight / 2 + 36 + fs * 1.5, fs, '#fff', 'center');
   }
   if (menuTap && performance.now() - menuTap.t < TIP_DELAY) { ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 0, 0); ctx.clip(); flushTip(); ctx.restore(); }   // celular: dedo recém-apoiado, a mensagem ainda não aparece (roda "no escuro" para o jogo seguir com o estado normal)
   else flushTip();

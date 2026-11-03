@@ -35,11 +35,11 @@ const BTN_TIPS = {
   'COMEÇAR': 'Começa o treino solitário. O personagem é sorteado.',
 };
 function flushTip() {
-  const tp = TIPNOW; TIPNOW = null; if (!UI_TIPS || !tp || TOUCH) return;   // UI_TIPS = false: sem o balão de ajuda ao passar o mouse
+  const tp = TIPNOW; TIPNOW = null; if (!tp || (!UI_TIPS && !TOUCH)) return;   // UI_TIPS = false: sem o balão ao passar o mouse (PC) | no celular o balão aparece ao segurar o dedo (o atraso fica no 15-loop.js)
   const W = innerWidth, H = innerHeight, d = RES;
   ctx.save(); ctx.setTransform(d, 0, 0, d, 0, 0); ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   const lines = wrapLines(tp, Math.min(300, W - 40), 12), bw = Math.min(320, W - 20), bh = lines.length * 18 + 18;
-  const tx = clamp(input.mx + 16, 10, W - bw - 10), ty = clamp(input.my > H * .5 ? input.my - bh - 16 : input.my + 20, 10, H - bh - 10);   // na metade de baixo o balão sobe
+  const tx = clamp(input.mx + (TOUCH ? -bw / 2 : 16), 10, W - bw - 10), ty = TOUCH ? clamp(input.my - bh - 50 < 10 ? input.my + 60 : input.my - bh - 50, 10, H - bh - 10) : clamp(input.my > H * .5 ? input.my - bh - 16 : input.my + 20, 10, H - bh - 10);   // celular: balão centralizado e longe do dedo   // na metade de baixo o balão sobe
   ctx.beginPath(); ctx.roundRect(tx + .5, ty + .5, bw - 1, bh - 1, 10); ctx.fillStyle = 'rgba(13,13,17,.96)'; ctx.fill(); ctx.strokeStyle = 'rgba(231,228,211,.6)'; ctx.lineWidth = 1; ctx.stroke();
   lines.forEach((l, i) => txt(l, tx + 12, ty + 18 + i * 18, 12, '#e7e4d3', 'left'));
   ctx.restore();
