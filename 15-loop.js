@@ -59,7 +59,8 @@ function loop(now) {
     txt('GIRE O CELULAR', innerWidth / 2, innerHeight / 2 - 12, Math.min(26, innerWidth / 12), '#e7e4d3', 'center');
     txt('(modo paisagem)', innerWidth / 2, innerHeight / 2 + 22, 14, '#8a8a96', 'center');
   }
-  flushTip();
+  if (menuTap && performance.now() - menuTap.t < TIP_DELAY) { ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 0, 0); ctx.clip(); flushTip(); ctx.restore(); }   // celular: dedo recém-apoiado, a mensagem ainda não aparece (roda "no escuro" para o jogo seguir com o estado normal)
+  else flushTip();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

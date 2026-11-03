@@ -61,6 +61,7 @@ canvas.addEventListener('wheel', e => {
 /* ------------------------------ TOUCH (celular) ----------------------- */
 let swipeAcc = 0;   // arrasto acumulado nas telas ARMAS e PERSONAGENS (40 px = 1 item)
 let menuTap = null;   // toque em menu: { id, x, y, t } enquanto o dedo está apoiado
+const TIP_DELAY = 500;   // ms com o dedo apoiado no botão antes de a mensagem (dica) aparecer; a borda amarela aparece na hora
 const TAP_MAX = 350, TAP_SLOP = 12;   // segurou mais que isso (ms) ou arrastou mais que isso (px) = não é clique
 function resetTouch() { menuTap = null; touch.move.id = touch.aim.id = null; touch.move.dx = touch.move.dy = 0; touch.btn = {}; input.down = false; }
 function touchLayout() {
