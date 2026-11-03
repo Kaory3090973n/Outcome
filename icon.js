@@ -3,7 +3,7 @@
   function hatIcon(N) {
     const c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d');
     g.fillStyle = '#000'; g.fillRect(0, 0, N, N);   // fundo preto
-    const s = N * .94 / 110; g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s);
+    const s = N * .66 / 110;   /* .66 = tamanho do chapéu no ícone (era .94); menor = mais fundo preto em volta */ g.save(); g.translate(N / 2, N / 2 + 11.5 * s); g.scale(s, s);
     logoHat(g, '#0d0d11', '#e7e4d3', true); g.restore(); return c.toDataURL('image/png');
   }
   try {
