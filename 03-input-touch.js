@@ -70,7 +70,7 @@ function clickUI(x, y) { for (const b of ui) if (x > b.x && x < b.x + b.w && y >
 function onTouchStart(t) {
   if (state === 'intro') { introClick(); return; }
   input.mx = t.clientX; input.my = t.clientY;
-  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; bindCapture = null; nameFocus = false; clickUI(t.clientX, t.clientY); return; }
+  if (state !== 'play') { touch.drag = t.identifier; touch.lastY = t.clientY; bindCapture = null; nameFocus = false; clickUI(t.clientX, t.clientY); input.mx = input.my = -9999; return; }   // dedo não é mouse: limpa a posição para a próxima tela não nascer com "hover"
   if (TUT && tutHit(t.clientX, t.clientY)) return;
   const L = touchLayout();
   for (const b of L.btns) if (Math.hypot(t.clientX - b.x, t.clientY - b.y) < b.r + 8) {
@@ -101,6 +101,7 @@ function onTouchMove(t) {
   }
 }
 function onTouchEnd(t) {
+  if (state !== 'play') input.mx = input.my = -9999;   // dedo saiu da tela: sem hover fantasma nos menus
   if (t.identifier === touch.move.id) { touch.move.id = null; touch.move.dx = touch.move.dy = 0; }
   if (t.identifier === touch.aim.id) { touch.aim.id = null; input.down = false; }
   delete touch.btn[t.identifier];
