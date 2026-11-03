@@ -242,7 +242,8 @@ function drawMaps(t) {
   const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', INK = '#e7e4d3';
   const ent = scrEnter('maps'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'blinds');
   ctx.save(); ctx.scale(ms, ms);
-  const k = ctx.getTransform().a / (RES), n = MAPS.length + 1, gap = 14, cw = Math.min(210, (IW - 40 - gap * (n - 1)) / n), ch = cw * 1.2;
+  if (MAPS.length === 1) cfg.map = 0;   // só um mapa: ignora valor antigo salvo
+  const k = ctx.getTransform().a / (RES), n = MAPS.length + (MAPS.length > 1 ? 1 : 0), gap = 14, cw = Math.min(210, (IW - 40 - gap * (n - 1)) / n), ch = cw * 1.2;
   const ts = clamp(Math.min(IW / 14, IH / 14), 20, 34), y0 = Math.max(14, (IH - (ts + 28 + ch + 22 + 64 + 16 + 52 + 12 + 44)) / 2);
   scrHead('ESCOLHER MAPA', cx, y0 + ts / 2, ts, IW, ent); ctx.globalAlpha = ent(.2);
   const y = y0 + ts + 28, x0 = cx - (n * cw + (n - 1) * gap) / 2;
@@ -258,7 +259,7 @@ function drawMaps(t) {
     if (mp) { ctx.beginPath(); ctx.roundRect(x + cw / 2 - 16, y + ph + 74, 32, 4, 2); ctx.fillStyle = sel ? mp.accent : 'rgba(255,255,255,.12)'; ctx.fill(); }
     ui.push({ x: x * k, y: y * k, w: cw * k, h: ch * k, fn: () => { cfg.map = i; saveCfg(); } });
   }
-  const desc = cfg.map < MAPS.length ? MAPS[cfg.map].desc() : 'Um dos três mapas é sorteado no início de cada partida. Quem joga de novo pode cair em outro.';
+  const desc = cfg.map < MAPS.length ? MAPS[cfg.map].desc() : 'Um dos mapas é sorteado no início de cada partida. Quem joga de novo pode cair em outro.';
   let yy = y + ch + 22;
   for (const l of wrapLines(desc, Math.min(600, IW - 40), 12)) { txt(l, cx, yy, 12, MUTE, 'center'); yy += 18; }
   yy = Math.max(yy, y + ch + 22 + 54) + 16;

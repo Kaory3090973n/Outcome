@@ -230,7 +230,8 @@ function chevBtn(x, y, s, dir, fn, k) {   // botão quadrado arredondado com set
   ui.push({ x: x * k, y: y * k, w: s * k, h: s * k, fn });
 }
 function drawSetupPre() {
-  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', DIM = '#5c5c68', INK = '#e7e4d3', GRN = '#8fd6a4', RED = '#ff7a6b', solo = soloSetup, n = cfg.team, pre = n > 0 && !solo, N = MAPS.length + 1;
+  if (MAPS.length === 1) cfg.map = 0;   // só um mapa: ignora valor antigo salvo
+  const ms = uiScale(), IW = innerWidth / ms, IH = innerHeight / ms, cx = IW / 2, MUTE = '#8a8a96', DIM = '#5c5c68', INK = '#e7e4d3', GRN = '#8fd6a4', RED = '#ff7a6b', solo = soloSetup, n = cfg.team, pre = n > 0 && !solo, N = MAPS.length + (MAPS.length > 1 ? 1 : 0);
   const ent = scrEnter('setup'); ctx.fillStyle = '#020203'; ctx.fillRect(0, 0, innerWidth, innerHeight); lobbyBg(IW, IH, ms, 1, ent, 'lamps');
   ctx.save(); ctx.scale(ms, ms);
   const k = ctx.getTransform().a / (RES), cyc = (v, m, d) => (v + d + m) % m, ls = v => { try { ctx.letterSpacing = v + 'px'; } catch (e) {} };

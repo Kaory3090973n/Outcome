@@ -56,7 +56,7 @@ function updateCam() {   // câmera presa ao personagem (para só nas bordas do 
   if (player.dead) { cam.x += (tx - cam.x) * .08; cam.y += (ty - cam.y) * .08; } else { cam.x = tx; cam.y = ty; }
 }
 function startGame(tr, keepKills) {
-  training = tr === true; trainT = 0; if (training) { curMap = MAPS[cfg.map >= MAPS.length ? Math.floor(Math.random() * MAPS.length) : cfg.map]; buildCrates(); }   // solitário: mapa escolhido (ALEATÓRIO sorteia)
+  training = tr === true; trainT = 0; if (training) { curMap = MAPS[cfg.map >= MAPS.length || cfg.map < 0 ? Math.floor(Math.random() * MAPS.length) : cfg.map]; buildCrates(); }   // solitário: mapa escolhido (ALEATÓRIO sorteia)
   if (training) { M = null; matchTrack = cfg.music ? cfg.music - 1 : pickTrack(); }
   decals = []; puddles = []; prints = []; pools.clear(); thrown = []; bullets = []; pickups = []; casings = []; trail = []; btrails = []; rings = []; sparks = []; if (curMap) buildCrates(); if (!keepKills) kills = 0; dmgFlash = 0; cmbN = cmbT = cmbPop = 0; killT = -1;
   const c = freeSpot();
